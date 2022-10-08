@@ -30,33 +30,40 @@ import net.minecraft.block.RotatedPillarBlock;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.data.CookingRecipeBuilder;
 import net.minecraft.data.ShapedRecipeBuilder;
+import net.minecraft.item.Item;
+import net.minecraft.tags.ITag;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.client.model.generators.ModelFile;
+import net.minecraftforge.common.Tags;
 
 public class PaletteBlockPattern {
 
 	public static final PaletteBlockPattern
 
 		COBBLESTONE = create("cobblestone", SUFFIX, ALL_PARTIALS)
+			.blockTags(Tags.Blocks.COBBLESTONE)
+			.itemTags(Tags.Items.COBBLESTONE)
 			.addRecipes(v -> (c, p) -> {
 				DataIngredient ingredient = DataIngredient.items(c.get());
 				Block result = v.getBaseBlock().get();
-				CookingRecipeBuilder.smeltingRecipe(ingredient, result, 0.1f, 200)
-					.addCriterion("has_" + p.safeName(ingredient), ingredient.getCritereon(p))
-					.build(p, p.safeId(result));
+				CookingRecipeBuilder.smelting(ingredient, result, 0.1f, 200)
+					.unlockedBy("has_" + p.safeName(ingredient), ingredient.getCritereon(p))
+					.save(p, p.safeId(result));
 			}),
 
 		POLISHED = create("polished", PREFIX, FOR_POLISHED)
+			.blockTags(Tags.Blocks.STONE)
+			.itemTags(Tags.Items.STONE)
 			.addRecipes(v -> (c, p) -> {
 				DataIngredient ingredient = DataIngredient.items(v.getBaseBlock().get());
-				ShapedRecipeBuilder.shapedRecipe(c.get(), 4)
-					.key('#', ingredient)
-					.patternLine("##")
-					.patternLine("##")
-					.addCriterion("has_" + p.safeName(ingredient), ingredient.getCritereon(p))
-					.build(p, p.safeId(c.get()));
+				ShapedRecipeBuilder.shaped(c.get(), 4)
+					.define('#', ingredient)
+					.pattern("##")
+					.pattern("##")
+					.unlockedBy("has_" + p.safeName(ingredient), ingredient.getCritereon(p))
+					.save(p, p.safeId(c.get()));
 			}),
 
 		BRICKS = create("bricks", SUFFIX, ALL_PARTIALS), FANCY_BRICKS = create("fancy_bricks", WRAP, ALL_PARTIALS),
@@ -77,12 +84,12 @@ public class PaletteBlockPattern {
 			.textures("pillar", "pillar_end")
 			.addRecipes(v -> (c, p) -> {
 				DataIngredient ingredient = DataIngredient.items(v.getBaseBlock().get());
-				ShapedRecipeBuilder.shapedRecipe(c.get(), 2)
-					.key('#', ingredient)
-					.patternLine("#")
-					.patternLine("#")
-					.addCriterion("has_" + p.safeName(ingredient), ingredient.getCritereon(p))
-					.build(p, p.safeId(c.get()));
+				ShapedRecipeBuilder.shaped(c.get(), 2)
+					.define('#', ingredient)
+					.pattern("#")
+					.pattern("#")
+					.unlockedBy("has_" + p.safeName(ingredient), ingredient.getCritereon(p))
+					.save(p, p.safeId(c.get()));
 			}),
 
 		MOSSY = create("mossy", PREFIX).blockStateFactory(p -> p::cubeAllButMossy)
@@ -111,6 +118,8 @@ public class PaletteBlockPattern {
 	private String id;
 	private boolean isTranslucent;
 	private boolean hasFoliage;
+	private ITag.INamedTag<Block>[] blockTags;
+	private ITag.INamedTag<Item>[] itemTags;
 	private Optional<Function<PaletteStoneVariants, ConnectedTextureBehaviour>> ctBehaviour;
 
 	private IPatternBlockStateGenerator blockStateGenerator;
@@ -147,6 +156,14 @@ public class PaletteBlockPattern {
 
 	public boolean hasFoliage() {
 		return hasFoliage;
+	}
+
+	public ITag.INamedTag<Block>[] getBlockTags() {
+		return blockTags;
+	}
+
+	public ITag.INamedTag<Item>[] getItemTags() {
+		return itemTags;
 	}
 
 	public NonNullFunction<Properties, ? extends Block> getBlockFactory() {
@@ -195,6 +212,18 @@ public class PaletteBlockPattern {
 
 	private PaletteBlockPattern withFoliage() {
 		hasFoliage = true;
+		return this;
+	}
+
+	@SafeVarargs
+	private final PaletteBlockPattern blockTags(ITag.INamedTag<Block>... tags) {
+		blockTags = tags;
+		return this;
+	}
+
+	@SafeVarargs
+	private final PaletteBlockPattern itemTags(ITag.INamedTag<Item>... tags) {
+		itemTags = tags;
 		return this;
 	}
 
@@ -300,7 +329,7 @@ public class PaletteBlockPattern {
 
 	// Textures with connectability, used by Spriteshifter
 
-	public static enum CTs {
+	public enum CTs {
 
 		POLISHED(CTType.OMNIDIRECTIONAL), LAYERED(CTType.HORIZONTAL)
 

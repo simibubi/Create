@@ -12,6 +12,7 @@ import javax.annotation.Nonnull;
 
 import com.google.common.base.Predicates;
 import com.simibubi.create.AllBlocks;
+import com.simibubi.create.AllFluids;
 import com.simibubi.create.AllItems;
 import com.simibubi.create.AllRecipeTypes;
 import com.simibubi.create.Create;
@@ -33,12 +34,16 @@ import com.simibubi.create.compat.jei.category.PolishingCategory;
 import com.simibubi.create.compat.jei.category.PressingCategory;
 import com.simibubi.create.compat.jei.category.ProcessingViaFanCategory;
 import com.simibubi.create.compat.jei.category.SawingCategory;
+import com.simibubi.create.compat.jei.category.SequencedAssemblyCategory;
 import com.simibubi.create.compat.jei.category.SpoutCategory;
+import com.simibubi.create.content.contraptions.components.crafter.MechanicalCraftingRecipe;
 import com.simibubi.create.content.contraptions.components.deployer.DeployerApplicationRecipe;
 import com.simibubi.create.content.contraptions.components.press.MechanicalPressTileEntity;
 import com.simibubi.create.content.contraptions.components.saw.SawTileEntity;
+import com.simibubi.create.content.contraptions.fluids.potion.PotionFluid;
 import com.simibubi.create.content.contraptions.fluids.recipe.PotionMixingRecipeManager;
 import com.simibubi.create.content.contraptions.processing.BasinRecipe;
+import com.simibubi.create.content.curiosities.toolbox.ToolboxScreen;
 import com.simibubi.create.content.curiosities.tools.BlueprintScreen;
 import com.simibubi.create.content.logistics.block.inventories.AdjustableCrateScreen;
 import com.simibubi.create.content.logistics.item.LinkedControllerScreen;
@@ -50,6 +55,7 @@ import com.simibubi.create.content.schematics.block.SchematicannonScreen;
 import com.simibubi.create.foundation.config.AllConfigs;
 import com.simibubi.create.foundation.config.CRecipes;
 import com.simibubi.create.foundation.config.ConfigBase.ConfigBool;
+import com.simibubi.create.foundation.utility.recipe.IRecipeTypeInfo;
 
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -59,6 +65,7 @@ import mezz.jei.api.registration.IRecipeCatalystRegistration;
 import mezz.jei.api.registration.IRecipeCategoryRegistration;
 import mezz.jei.api.registration.IRecipeRegistration;
 import mezz.jei.api.registration.IRecipeTransferRegistration;
+import mezz.jei.api.registration.ISubtypeRegistration;
 import mezz.jei.api.runtime.IIngredientManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.item.ItemStack;
@@ -76,13 +83,7 @@ import net.minecraftforge.fml.ModList;
 @SuppressWarnings("unused")
 public class CreateJEI implements IModPlugin {
 
-	private static final ResourceLocation ID = new ResourceLocation(Create.ID, "jei_plugin");
-
-	@Override
-	@Nonnull
-	public ResourceLocation getPluginUid() {
-		return ID;
-	}
+	private static final ResourceLocation ID = Create.asResource("jei_plugin");
 
 	public IIngredientManager ingredientManager;
 	private final List<CreateRecipeCategory<?>> allCategories = new ArrayList<>();
@@ -121,9 +122,13 @@ public class CreateJEI implements IModPlugin {
 			.catalyst(AllBlocks.BASIN::get)
 			.build(),
 
+		seqAssembly = register("sequenced_assembly", SequencedAssemblyCategory::new)
+			.recipes(AllRecipeTypes.SEQUENCED_ASSEMBLY::getType)
+			.build(),
+
 		autoShapeless = register("automatic_shapeless", MixingCategory::autoShapeless)
-			.recipes(r -> r.getSerializer() == IRecipeSerializer.CRAFTING_SHAPELESS && r.getIngredients()
-				.size() > 1 && !MechanicalPressTileEntity.canCompress(r.getIngredients()),
+			.recipes(r -> r.getSerializer() == IRecipeSerializer.SHAPELESS_RECIPE && r.getIngredients()
+				.size() > 1 && !MechanicalPressTileEntity.canCompress(r) && !AllRecipeTypes.isManualRecipe(r),
 				BasinRecipe::convertShapeless)
 			.catalyst(AllBlocks.MECHANICAL_MIXER::get)
 			.catalyst(AllBlocks.BASIN::get)
@@ -141,14 +146,16 @@ public class CreateJEI implements IModPlugin {
 			.build(),
 
 		blockCutting = register("block_cutting", () -> new BlockCuttingCategory(Items.STONE_BRICK_STAIRS))
-			.recipeList(() -> CondensedBlockCuttingRecipe.condenseRecipes(findRecipesByType(IRecipeType.STONECUTTING)))
+			.recipeList(() -> CondensedBlockCuttingRecipe.condenseRecipes(findRecipes(
+				recipe -> recipe.getType() == IRecipeType.STONECUTTING && !AllRecipeTypes.isManualRecipe(recipe))))
 			.catalyst(AllBlocks.MECHANICAL_SAW::get)
 			.enableWhen(c -> c.allowStonecuttingOnSaw)
 			.build(),
 
 		woodCutting = register("wood_cutting", () -> new BlockCuttingCategory(Items.OAK_STAIRS))
 			.recipeList(() -> CondensedBlockCuttingRecipe
-				.condenseRecipes(findRecipesByType(SawTileEntity.woodcuttingRecipeType.getValue())))
+				.condenseRecipes(findRecipes(recipe -> recipe.getType() == SawTileEntity.woodcuttingRecipeType.get()
+					&& !AllRecipeTypes.isManualRecipe(recipe))))
 			.catalyst(AllBlocks.MECHANICAL_SAW::get)
 			.enableWhenBool(c -> c.allowWoodcuttingOnSaw.get() && ModList.get()
 				.isLoaded("druidcraft"))
@@ -160,7 +167,9 @@ public class CreateJEI implements IModPlugin {
 			.build(),
 
 		autoSquare = register("automatic_packing", PackingCategory::autoSquare)
-			.recipes(r -> (r instanceof ICraftingRecipe) && MechanicalPressTileEntity.canCompress(r.getIngredients()),
+			.recipes(
+				r -> (r instanceof ICraftingRecipe) && !(r instanceof MechanicalCraftingRecipe)
+					&& MechanicalPressTileEntity.canCompress(r) && !AllRecipeTypes.isManualRecipe(r),
 				BasinRecipe::convertShapeless)
 			.catalyst(AllBlocks.MECHANICAL_PRESS::get)
 			.catalyst(AllBlocks.BASIN::get)
@@ -173,8 +182,8 @@ public class CreateJEI implements IModPlugin {
 			.build(),
 
 		deploying = register("deploying", DeployingCategory::new)
-			.recipeList(
-				() -> DeployerApplicationRecipe.convert(findRecipesByType(AllRecipeTypes.SANDPAPER_POLISHING.type)))
+			.recipeList(() -> DeployerApplicationRecipe
+				.convert(findRecipesByType(AllRecipeTypes.SANDPAPER_POLISHING.getType())))
 			.recipes(AllRecipeTypes.DEPLOYING)
 			.catalyst(AllBlocks.DEPLOYER::get)
 			.catalyst(AllBlocks.DEPOT::get)
@@ -197,11 +206,11 @@ public class CreateJEI implements IModPlugin {
 			.build(),
 
 		autoShaped = register("automatic_shaped", MechanicalCraftingCategory::new)
-			.recipes(r -> r.getSerializer() == IRecipeSerializer.CRAFTING_SHAPELESS && r.getIngredients()
+			.recipes(r -> r.getSerializer() == IRecipeSerializer.SHAPELESS_RECIPE && r.getIngredients()
 				.size() == 1)
-			.recipes(
-				r -> (r.getType() == IRecipeType.CRAFTING && r.getType() != AllRecipeTypes.MECHANICAL_CRAFTING.type)
-					&& (r instanceof ShapedRecipe))
+			.recipes(r -> (r.getType() == IRecipeType.CRAFTING
+				&& r.getType() != AllRecipeTypes.MECHANICAL_CRAFTING.getType()) && (r instanceof ShapedRecipe)
+				&& !AllRecipeTypes.isManualRecipe(r))
 			.catalyst(AllBlocks.MECHANICAL_CRAFTER::get)
 			.enableWhen(c -> c.allowRegularCraftingInCrafter)
 			.build(),
@@ -209,13 +218,17 @@ public class CreateJEI implements IModPlugin {
 		mechanicalCrafting =
 			register("mechanical_crafting", MechanicalCraftingCategory::new).recipes(AllRecipeTypes.MECHANICAL_CRAFTING)
 				.catalyst(AllBlocks.MECHANICAL_CRAFTER::get)
-				.build()
-
-	;
+				.build();
 
 	private <T extends IRecipe<?>> CategoryBuilder<T> register(String name,
 		Supplier<CreateRecipeCategory<T>> supplier) {
 		return new CategoryBuilder<T>(name, supplier);
+	}
+
+	@Override
+	@Nonnull
+	public ResourceLocation getPluginUid() {
+		return ID;
 	}
 
 	@Override
@@ -229,9 +242,20 @@ public class CreateJEI implements IModPlugin {
 	}
 
 	@Override
+	public void registerFluidSubtypes(ISubtypeRegistration registration) {
+		PotionFluidSubtypeInterpreter interpreter = new PotionFluidSubtypeInterpreter();
+		PotionFluid potionFluid = AllFluids.POTION.get();
+		registration.registerSubtypeInterpreter(potionFluid.getSource(), interpreter);
+		registration.registerSubtypeInterpreter(potionFluid.getFlowing(), interpreter);
+	}
+
+	@Override
 	public void registerRecipes(IRecipeRegistration registration) {
 		ingredientManager = registration.getIngredientManager();
 		allCategories.forEach(c -> c.recipes.forEach(s -> registration.addRecipes(s.get(), c.getUid())));
+
+		registration.addRecipes(ToolboxColoringRecipeMaker.createRecipes()
+			.collect(Collectors.toList()), VanillaRecipeCategoryUid.CRAFTING);
 	}
 
 	@Override
@@ -250,6 +274,7 @@ public class CreateJEI implements IModPlugin {
 		registration.addGuiContainerHandler(AttributeFilterScreen.class, slotMover);
 		registration.addGuiContainerHandler(BlueprintScreen.class, slotMover);
 		registration.addGuiContainerHandler(LinkedControllerScreen.class, slotMover);
+		registration.addGuiContainerHandler(ToolboxScreen.class, slotMover);
 
 		registration.addGhostIngredientHandler(AbstractFilterScreen.class, new GhostIngredientHandler());
 		registration.addGhostIngredientHandler(BlueprintScreen.class, new GhostIngredientHandler());
@@ -266,7 +291,7 @@ public class CreateJEI implements IModPlugin {
 			pred = Predicates.alwaysTrue();
 		}
 
-		public CategoryBuilder<T> recipes(AllRecipeTypes recipeTypeEntry) {
+		public CategoryBuilder<T> recipes(IRecipeTypeInfo recipeTypeEntry) {
 			return recipes(recipeTypeEntry::getType);
 		}
 
@@ -356,7 +381,7 @@ public class CreateJEI implements IModPlugin {
 	}
 
 	public static List<IRecipe<?>> findRecipes(Predicate<IRecipe<?>> predicate) {
-		return Minecraft.getInstance().world.getRecipeManager()
+		return Minecraft.getInstance().level.getRecipeManager()
 			.getRecipes()
 			.stream()
 			.filter(predicate)
@@ -393,7 +418,7 @@ public class CreateJEI implements IModPlugin {
 	public static boolean doInputsMatch(IRecipe<?> recipe1, IRecipe<?> recipe2) {
 		ItemStack[] matchingStacks = recipe1.getIngredients()
 			.get(0)
-			.getMatchingStacks();
+			.getItems();
 		if (matchingStacks.length == 0)
 			return true;
 		if (recipe2.getIngredients()

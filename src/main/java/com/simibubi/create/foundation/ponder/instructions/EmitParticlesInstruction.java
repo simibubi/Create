@@ -24,12 +24,12 @@ public class EmitParticlesInstruction extends TickingInstruction {
 
 		public static <T extends IParticleData> Emitter withinBlockSpace(T data, Vector3d motion) {
 			return (w, x, y, z) -> w.addParticle(data, Math.floor(x) + Create.RANDOM.nextFloat(),
-				Math.floor(y) + Create.RANDOM.nextFloat(), Math.floor(z) + Create.RANDOM.nextFloat(), motion.x,
-				motion.y, motion.z);
+					Math.floor(y) + Create.RANDOM.nextFloat(), Math.floor(z) + Create.RANDOM.nextFloat(), motion.x,
+					motion.y, motion.z);
 		}
 
 		static ParticleManager paticleManager() {
-			return Minecraft.getInstance().particles;
+			return Minecraft.getInstance().particleEngine;
 		}
 
 		public void create(PonderWorld world, double x, double y, double z);

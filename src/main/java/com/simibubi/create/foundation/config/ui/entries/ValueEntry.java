@@ -1,18 +1,16 @@
 package com.simibubi.create.foundation.config.ui.entries;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.function.Predicate;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
-import org.apache.commons.lang3.ArrayUtils;
-
 import com.google.common.base.Predicates;
 import com.mojang.blaze3d.matrix.MatrixStack;
+import com.simibubi.create.foundation.config.ui.ConfigAnnotations;
 import com.simibubi.create.foundation.config.ui.ConfigHelper;
 import com.simibubi.create.foundation.config.ui.ConfigScreen;
 import com.simibubi.create.foundation.config.ui.ConfigScreenList;
@@ -20,23 +18,20 @@ import com.simibubi.create.foundation.gui.AllIcons;
 import com.simibubi.create.foundation.gui.DelegatedStencilElement;
 import com.simibubi.create.foundation.gui.widgets.BoxWidget;
 import com.simibubi.create.foundation.item.TooltipHelper;
+import com.simibubi.create.foundation.utility.Pair;
 
-import net.minecraft.util.text.IFormattableTextComponent;
 import net.minecraft.util.text.StringTextComponent;
 import net.minecraft.util.text.TextFormatting;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 public class ValueEntry<T> extends ConfigScreenList.LabeledEntry {
 
-	protected static final IFormattableTextComponent modComponent = new StringTextComponent("* ").formatted(TextFormatting.BOLD, TextFormatting.DARK_BLUE).append(StringTextComponent.EMPTY.copy().formatted(TextFormatting.RESET));
 	protected static final int resetWidth = 28;//including 6px offset on either side
-	public static final Pattern unitPattern = Pattern.compile("\\[(in .*)]");
 
 	protected ForgeConfigSpec.ConfigValue<T> value;
 	protected ForgeConfigSpec.ValueSpec spec;
 	protected BoxWidget resetButton;
 	protected boolean editable = true;
-	protected String path;
 
 	public ValueEntry(String label, ForgeConfigSpec.ConfigValue<T> value, ForgeConfigSpec.ValueSpec spec) {
 		super(label);
@@ -55,38 +50,36 @@ public class ValueEntry<T> extends ConfigScreenList.LabeledEntry {
 		listeners.add(resetButton);
 
 		List<String> path = value.getPath();
-		labelTooltip.add(new StringTextComponent(label).formatted(TextFormatting.WHITE));
+		labelTooltip.add(new StringTextComponent(label).withStyle(TextFormatting.WHITE));
 		String comment = spec.getComment();
 		if (comment == null || comment.isEmpty())
 			return;
-		String[] commentLines = comment.split("\n");
-		//find unit in the comment
-		for (int i = 0; i < commentLines.length; i++) {
-			if (commentLines[i].isEmpty()) {
-				commentLines = ArrayUtils.remove(commentLines, i);
-				i--;
-				continue;
-			}
 
-			Matcher matcher = unitPattern.matcher(commentLines[i]);
-			if (!matcher.matches())
-				continue;
+		List<String> commentLines = new ArrayList<>(Arrays.asList(comment.split("\n")));
 
-			String u = matcher.group(1);
-			if (u.equals("in Revolutions per Minute"))
-				u = "in RPM";
-			if (u.equals("in Stress Units"))
-				u = "in SU";
-			unit = u;
+
+		Pair<String, Map<String, String>> metadata = ConfigHelper.readMetadataFromComment(commentLines);
+		if (metadata.getFirst() != null) {
+			unit = metadata.getFirst();
+		}
+		if (metadata.getSecond() != null && !metadata.getSecond().isEmpty()) {
+			annotations.putAll(metadata.getSecond());
 		}
 		// add comment to tooltip
-		labelTooltip.addAll(Arrays.stream(commentLines)
-			.filter(Predicates.not(s -> s.startsWith("Range")))
-			.map(StringTextComponent::new)
-			.flatMap(stc -> TooltipHelper.cutTextComponent(stc, TextFormatting.GRAY, TextFormatting.GRAY)
-				.stream())
-			.collect(Collectors.toList()));
-		labelTooltip.add(new StringTextComponent(ConfigScreen.modID + ":" + path.get(path.size()-1)).formatted(TextFormatting.DARK_GRAY));
+		labelTooltip.addAll(commentLines.stream()
+				.filter(Predicates.not(s -> s.startsWith("Range")))
+				.map(StringTextComponent::new)
+				.flatMap(stc -> TooltipHelper.cutTextComponent(stc, TextFormatting.GRAY, TextFormatting.GRAY)
+						.stream())
+				.collect(Collectors.toList()));
+
+		if (annotations.containsKey(ConfigAnnotations.RequiresRelog.TRUE.getName()))
+			labelTooltip.addAll(TooltipHelper.cutTextComponent(new StringTextComponent("Changing this value will require a _relog_ to take full effect"), TextFormatting.GRAY, TextFormatting.GOLD));
+
+		if (annotations.containsKey(ConfigAnnotations.RequiresRestart.CLIENT.getName()))
+			labelTooltip.addAll(TooltipHelper.cutTextComponent(new StringTextComponent("Changing this value will require a _restart_ to take full effect"), TextFormatting.GRAY, TextFormatting.RED));
+
+		labelTooltip.add(new StringTextComponent(ConfigScreen.modID + ":" + path.get(path.size() - 1)).withStyle(TextFormatting.DARK_GRAY));
 	}
 
 	@Override
@@ -104,15 +97,7 @@ public class ValueEntry<T> extends ConfigScreenList.LabeledEntry {
 
 	@Override
 	public void render(MatrixStack ms, int index, int y, int x, int width, int height, int mouseX, int mouseY, boolean p_230432_9_, float partialTicks) {
-		if (isCurrentValueChanged()) {
-			IFormattableTextComponent original = label.getComponent();
-			IFormattableTextComponent changed = modComponent.copy().append(original);
-			label.withText(changed);
-			super.render(ms, index, y, x, width, height, mouseX, mouseY, p_230432_9_, partialTicks);
-			label.withText(original);
-		} else {
-			super.render(ms, index, y, x, width, height, mouseX, mouseY, p_230432_9_, partialTicks);
-		}
+		super.render(ms, index, y, x, width, height, mouseX, mouseY, p_230432_9_, partialTicks);
 
 		resetButton.x = x + width - resetWidth + 6;
 		resetButton.y = y + 10;
@@ -125,17 +110,13 @@ public class ValueEntry<T> extends ConfigScreenList.LabeledEntry {
 	}
 
 	public void setValue(@Nonnull T value) {
-		ConfigHelper.setValue(path, this.value, value);
+		ConfigHelper.setValue(path, this.value, value, annotations);
 		onValueChange(value);
 	}
 
 	@Nonnull
 	public T getValue() {
 		return ConfigHelper.getValue(path, this.value);
-	}
-
-	protected boolean isCurrentValueChanged() {
-		return ConfigScreen.changes.containsKey(path);
 	}
 
 	protected boolean isCurrentValueDefault() {

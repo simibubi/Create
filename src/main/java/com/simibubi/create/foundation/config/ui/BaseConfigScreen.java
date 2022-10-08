@@ -1,8 +1,14 @@
 package com.simibubi.create.foundation.config.ui;
 
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.function.UnaryOperator;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.mojang.blaze3d.matrix.MatrixStack;
 import com.simibubi.create.Create;
 import com.simibubi.create.foundation.config.AllConfigs;
 import com.simibubi.create.foundation.gui.AllIcons;
@@ -23,42 +29,65 @@ import net.minecraftforge.fml.config.ModConfig;
 
 public class BaseConfigScreen extends ConfigScreen {
 
-	private static final DelegatedStencilElement.ElementRenderer DISABLED_RENDERER = (ms, width, height, alpha) -> UIRenderHelper.angledGradient(ms, 0, 0, height / 2, height, width, Theme.i(Theme.Key.BUTTON_DISABLE, true), Theme.i(Theme.Key.BUTTON_DISABLE, false) | 0x40_000000);
+	public static final DelegatedStencilElement.ElementRenderer DISABLED_RENDERER = (ms, width, height, alpha) -> UIRenderHelper.angledGradient(ms, 0, 0, height / 2, height, width, Theme.p(Theme.Key.BUTTON_DISABLE));
+	private static final Map<String, UnaryOperator<BaseConfigScreen>> defaults = new HashMap<>();
+
+	static {
+		defaults.put("create", (base) -> base
+				.withTitles("Client Settings", "World Generation Settings", "Gameplay Settings")
+				.withSpecs(AllConfigs.CLIENT.specification, AllConfigs.COMMON.specification, AllConfigs.SERVER.specification)
+		);
+	}
+
+	/**
+	 * If you are a Create Addon dev and want to change the config labels,
+	 * add a default action here.
+	 *
+	 * Make sure you call either {@link #withSpecs(ForgeConfigSpec, ForgeConfigSpec, ForgeConfigSpec)}
+	 * or {@link #searchForSpecsInModContainer()}
+	 *
+	 * @param modID     the modID of your addon/mod
+	 */
+	public static void setDefaultActionFor(String modID, UnaryOperator<BaseConfigScreen> transform) {
+		if (modID.equalsIgnoreCase("create"))
+			return;
+
+		defaults.put(modID, transform);
+	}
 
 	public static BaseConfigScreen forCreate(Screen parent) {
-		return new BaseConfigScreen(parent)
-				.withTitles("Client Settings", "World Generation Settings", "Gameplay Settings")
-				.withSpecs(AllConfigs.CLIENT.specification, AllConfigs.COMMON.specification, AllConfigs.SERVER.specification);
+		return new BaseConfigScreen(parent);
 	}
 
 	BoxWidget clientConfigWidget;
 	BoxWidget commonConfigWidget;
 	BoxWidget serverConfigWidget;
 	BoxWidget goBack;
+	BoxWidget others;
+	BoxWidget title;
 
 	ForgeConfigSpec clientSpec;
 	ForgeConfigSpec commonSpec;
 	ForgeConfigSpec serverSpec;
-	String clientTile = "CLIENT CONFIG";
-	String commonTile = "COMMON CONFIG";
-	String serverTile = "SERVER CONFIG";
-	String modID = Create.ID;
+	String clientTile = "Client Config";
+	String commonTile = "Common Config";
+	String serverTile = "Server Config";
+	String modID;
 	protected boolean returnOnClose;
 
-	/**
-	 * If you are a Create Addon dev and want to make use of the same GUI
-	 * for your mod's config, use this Constructor to create a entry point
-	 *
-	 * @param parent the previously opened screen
-	 * @param modID  the modID of your addon/mod
-	 */
 	public BaseConfigScreen(Screen parent, @Nonnull String modID) {
-		this(parent);
+		super(parent);
 		this.modID = modID;
+
+		if (defaults.containsKey(modID))
+			defaults.get(modID).apply(this);
+		else {
+			this.searchForSpecsInModContainer();
+		}
 	}
 
 	private BaseConfigScreen(Screen parent) {
-		super(parent);
+		this(parent, Create.ID);
 	}
 
 	/**
@@ -66,22 +95,26 @@ public class BaseConfigScreen extends ConfigScreen {
 	 * please use {@link #withSpecs(ForgeConfigSpec, ForgeConfigSpec, ForgeConfigSpec)} instead
 	 */
 	public BaseConfigScreen searchForSpecsInModContainer() {
+		if (!ConfigHelper.hasAnyConfig(this.modID)){
+			return this;
+		}
+
 		try {
 			clientSpec = ConfigHelper.findConfigSpecFor(ModConfig.Type.CLIENT, this.modID);
 		} catch (Exception e) {
-			Create.LOGGER.warn("Unable to find ClientConfigSpec for mod: " + this.modID);
+			Create.LOGGER.debug("Unable to find ClientConfigSpec for mod: " + this.modID);
 		}
 
 		try {
 			commonSpec = ConfigHelper.findConfigSpecFor(ModConfig.Type.COMMON, this.modID);
 		} catch (Exception e) {
-			Create.LOGGER.warn("Unable to find CommonConfigSpec for mod: " + this.modID, e);
+			Create.LOGGER.debug("Unable to find CommonConfigSpec for mod: " + this.modID);
 		}
 
 		try {
 			serverSpec = ConfigHelper.findConfigSpecFor(ModConfig.Type.SERVER, this.modID);
 		} catch (Exception e) {
-			Create.LOGGER.warn("Unable to find ServerConfigSpec for mod: " + this.modID, e);
+			Create.LOGGER.debug("Unable to find ServerConfigSpec for mod: " + this.modID);
 		}
 
 		return this;
@@ -113,7 +146,7 @@ public class BaseConfigScreen extends ConfigScreen {
 		super.init();
 		returnOnClose = true;
 
-		TextStencilElement clientText = new TextStencilElement(client.fontRenderer, new StringTextComponent(clientTile)).centered(true, true);
+		TextStencilElement clientText = new TextStencilElement(minecraft.font, new StringTextComponent(clientTile)).centered(true, true);
 		widgets.add(clientConfigWidget = new BoxWidget(width / 2 - 100, height / 2 - 15 - 30, 200, 16).showingElement(clientText));
 
 		if (clientSpec != null) {
@@ -125,7 +158,7 @@ public class BaseConfigScreen extends ConfigScreen {
 			clientText.withElementRenderer(DISABLED_RENDERER);
 		}
 
-		TextStencilElement commonText = new TextStencilElement(client.fontRenderer, new StringTextComponent(commonTile)).centered(true, true);
+		TextStencilElement commonText = new TextStencilElement(minecraft.font, new StringTextComponent(commonTile)).centered(true, true);
 		widgets.add(commonConfigWidget = new BoxWidget(width / 2 - 100, height / 2 - 15, 200, 16).showingElement(commonText));
 
 		if (commonSpec != null) {
@@ -137,46 +170,79 @@ public class BaseConfigScreen extends ConfigScreen {
 			commonText.withElementRenderer(DISABLED_RENDERER);
 		}
 
-		TextStencilElement serverText = new TextStencilElement(client.fontRenderer, new StringTextComponent(serverTile)).centered(true, true);
+		TextStencilElement serverText = new TextStencilElement(minecraft.font, new StringTextComponent(serverTile)).centered(true, true);
 		widgets.add(serverConfigWidget = new BoxWidget(width / 2 - 100, height / 2 - 15 + 30, 200, 16).showingElement(serverText));
 
-		if (serverSpec != null && Minecraft.getInstance().world != null) {
-			serverConfigWidget.withCallback(() -> linkTo(new SubMenuConfigScreen(this, ModConfig.Type.SERVER, serverSpec)));
-			serverText.withElementRenderer(BoxWidget.gradientFactory.apply(serverConfigWidget));
-		} else {
+		if (serverSpec == null) {
 			serverConfigWidget.active = false;
 			serverConfigWidget.updateColorsFromState();
 			serverText.withElementRenderer(DISABLED_RENDERER);
-			serverConfigWidget.active = true;
+		} else if (Minecraft.getInstance().level == null) {
+			serverText.withElementRenderer(DISABLED_RENDERER);
 			serverConfigWidget.getToolTip()
-				.add(new StringTextComponent("Stored individually per World"));
+					.add(new StringTextComponent("Stored individually per World"));
 			serverConfigWidget.getToolTip()
-				.addAll(TooltipHelper.cutTextComponent(
-					new StringTextComponent(
-						"Gameplay settings can only be accessed from the in-game menu after joining a World or Server."),
-					TextFormatting.GRAY, TextFormatting.GRAY));
+					.addAll(TooltipHelper.cutTextComponent(
+							new StringTextComponent(
+									"Gameplay settings can only be accessed from the in-game menu after joining a World or Server."),
+							TextFormatting.GRAY, TextFormatting.GRAY));
+		} else {
+			serverConfigWidget.withCallback(() -> linkTo(new SubMenuConfigScreen(this, ModConfig.Type.SERVER, serverSpec)));
+			serverText.withElementRenderer(BoxWidget.gradientFactory.apply(serverConfigWidget));
 		}
+
+		TextStencilElement titleText = new TextStencilElement(minecraft.font, modID.toUpperCase(Locale.ROOT))
+				.centered(true, true)
+				.withElementRenderer((ms, w, h, alpha) -> {
+					UIRenderHelper.angledGradient(ms, 0, 0, h / 2, h, w / 2, Theme.p(Theme.Key.CONFIG_TITLE_A));
+					UIRenderHelper.angledGradient(ms, 0, w / 2, h / 2, h, w / 2, Theme.p(Theme.Key.CONFIG_TITLE_B));
+				});
+		int boxWidth = width + 10;
+		int boxHeight = 39;
+		int boxPadding = 4;
+		title = new BoxWidget(-5, height / 2 - 110, boxWidth, boxHeight)
+				//.withCustomBackground(new Color(0x20_000000, true))
+				.withBorderColors(Theme.p(Theme.Key.BUTTON_IDLE))
+				.withPadding(0, boxPadding)
+				.rescaleElement(boxWidth / 2f, (boxHeight - 2 * boxPadding) / 2f)//double the text size by telling it the element is only half as big as the available space
+				.showingElement(titleText.at(0, 7));
+		title.active = false;
+
+		widgets.add(title);
+
 
 		ConfigScreen.modID = this.modID;
 
 		goBack = new BoxWidget(width / 2 - 134, height / 2, 20, 20).withPadding(2, 2)
-			.withCallback(this::onClose);
+				.withCallback(this::onClose);
 		goBack.showingElement(AllIcons.I_CONFIG_BACK.asStencil()
-			.withElementRenderer(BoxWidget.gradientFactory.apply(goBack)));
+				.withElementRenderer(BoxWidget.gradientFactory.apply(goBack)));
 		goBack.getToolTip()
-			.add(new StringTextComponent("Go Back"));
+				.add(new StringTextComponent("Go Back"));
 		widgets.add(goBack);
+
+		TextStencilElement othersText = new TextStencilElement(minecraft.font, new StringTextComponent("Access Configs of other Mods")).centered(true, true);
+		others = new BoxWidget(width / 2 - 100, height / 2 - 15 + 90, 200, 16).showingElement(othersText);
+		othersText.withElementRenderer(BoxWidget.gradientFactory.apply(others));
+		others.withCallback(() -> linkTo(new ConfigModListScreen(this)));
+		widgets.add(others);
+
 	}
-	
+
+	@Override
+	protected void renderWindow(MatrixStack ms, int mouseX, int mouseY, float partialTicks) {
+		drawCenteredString(ms, minecraft.font, "Access Configs for Mod:", width / 2, height / 2 - 105, Theme.i(Theme.Key.TEXT_ACCENT_STRONG));
+	}
+
 	private void linkTo(Screen screen) {
 		returnOnClose = false;
 		ScreenOpener.open(screen);
 	}
-	
+
 	@Override
 	public void onClose() {
 		super.onClose();
 		ScreenOpener.open(parent);
 	}
-	
+
 }

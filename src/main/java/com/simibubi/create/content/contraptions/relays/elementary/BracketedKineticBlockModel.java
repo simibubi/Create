@@ -4,8 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
+import com.jozufozu.flywheel.util.VirtualEmptyModelData;
 import com.simibubi.create.foundation.tileEntity.TileEntityBehaviour;
-import com.simibubi.create.foundation.utility.VirtualEmptyModelData;
 
 import net.minecraft.block.BlockState;
 import net.minecraft.client.Minecraft;
@@ -67,8 +67,8 @@ public class BracketedKineticBlockModel extends BakedModelWrapper<IBakedModel> {
 
 		public void putBracket(BlockState state) {
 			this.bracket = Minecraft.getInstance()
-				.getBlockRendererDispatcher()
-				.getModelForState(state);
+				.getBlockRenderer()
+				.getBlockModel(state);
 		}
 
 		public IBakedModel getBracket() {

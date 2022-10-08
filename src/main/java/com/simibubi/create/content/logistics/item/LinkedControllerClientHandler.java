@@ -9,6 +9,7 @@ import java.util.Vector;
 import org.lwjgl.glfw.GLFW;
 
 import com.mojang.blaze3d.matrix.MatrixStack;
+import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
 import com.simibubi.create.AllSoundEvents;
 import com.simibubi.create.CreateClient;
@@ -34,13 +35,10 @@ import net.minecraft.util.text.TextFormatting;
 
 public class LinkedControllerClientHandler {
 
-	enum Mode {
-		IDLE, ACTIVE, BIND
-	}
-
 	public static Mode MODE = Mode.IDLE;
 	public static int PACKET_RATE = 5;
 	public static Collection<Integer> currentlyPressed = new HashSet<>();
+	private static BlockPos lecternPos;
 	private static BlockPos selectedLocation = BlockPos.ZERO;
 	private static Vector<KeyBinding> controls;
 
@@ -48,14 +46,14 @@ public class LinkedControllerClientHandler {
 
 	public static Vector<KeyBinding> getControls() {
 		if (controls == null) {
-			GameSettings gameSettings = Minecraft.getInstance().gameSettings;
+			GameSettings gameSettings = Minecraft.getInstance().options;
 			controls = new Vector<>(6);
-			controls.add(gameSettings.keyBindForward);
-			controls.add(gameSettings.keyBindBack);
-			controls.add(gameSettings.keyBindLeft);
-			controls.add(gameSettings.keyBindRight);
-			controls.add(gameSettings.keyBindJump);
-			controls.add(gameSettings.keySneak);
+			controls.add(gameSettings.keyUp);
+			controls.add(gameSettings.keyDown);
+			controls.add(gameSettings.keyLeft);
+			controls.add(gameSettings.keyRight);
+			controls.add(gameSettings.keyJump);
+			controls.add(gameSettings.keyShift);
 		}
 		return controls;
 	}
@@ -71,34 +69,60 @@ public class LinkedControllerClientHandler {
 	}
 
 	public static void toggle() {
-		if (MODE == Mode.IDLE)
+		if (MODE == Mode.IDLE) {
 			MODE = Mode.ACTIVE;
-		else {
+			lecternPos = null;
+		}  else {
 			MODE = Mode.IDLE;
 			onReset();
 		}
 	}
 
+	public static void activateInLectern(BlockPos lecternAt) {
+		if (MODE == Mode.IDLE) {
+			MODE = Mode.ACTIVE;
+			lecternPos = lecternAt;
+		}
+	}
+
+	public static void deactivateInLectern() {
+		if (MODE == Mode.ACTIVE && inLectern()) {
+			MODE = Mode.IDLE;
+			onReset();
+		}
+	}
+
+	public static boolean inLectern() {
+		return lecternPos != null;
+	}
+
 	protected static void onReset() {
-		getControls().forEach(kb -> kb.setPressed(isActuallyPressed(kb)));
+		getControls().forEach(kb -> kb.setDown(isActuallyPressed(kb)));
 		packetCooldown = 0;
 		selectedLocation = BlockPos.ZERO;
+
+		if (inLectern())
+			AllPackets.channel.sendToServer(new LinkedControllerStopLecternPacket(lecternPos));
+		lecternPos = null;
 
 		if (!currentlyPressed.isEmpty())
 			AllPackets.channel.sendToServer(new LinkedControllerInputPacket(currentlyPressed, false));
 		currentlyPressed.clear();
+
+		LinkedControllerItemRenderer.resetButtons();
 	}
 
 	protected static boolean isActuallyPressed(KeyBinding kb) {
 		return InputMappings.isKeyDown(Minecraft.getInstance()
 			.getWindow()
-			.getHandle(),
+			.getWindow(),
 			kb.getKey()
-				.getKeyCode());
+				.getValue());
 	}
 
 	public static void tick() {
 		LinkedControllerItemRenderer.tick();
+
 		if (MODE == Mode.IDLE)
 			return;
 		if (packetCooldown > 0)
@@ -106,7 +130,7 @@ public class LinkedControllerClientHandler {
 
 		Minecraft mc = Minecraft.getInstance();
 		ClientPlayerEntity player = mc.player;
-		ItemStack heldItem = player.getHeldItemMainhand();
+		ItemStack heldItem = player.getMainHandItem();
 
 		if (player.isSpectator()) {
 			MODE = Mode.IDLE;
@@ -114,8 +138,8 @@ public class LinkedControllerClientHandler {
 			return;
 		}
 
-		if (!AllItems.LINKED_CONTROLLER.isIn(heldItem)) {
-			heldItem = player.getHeldItemOffhand();
+		if (!inLectern() && !AllItems.LINKED_CONTROLLER.isIn(heldItem)) {
+			heldItem = player.getOffhandItem();
 			if (!AllItems.LINKED_CONTROLLER.isIn(heldItem)) {
 				MODE = Mode.IDLE;
 				onReset();
@@ -123,13 +147,20 @@ public class LinkedControllerClientHandler {
 			}
 		}
 
-		if (mc.currentScreen != null) {
+		if (inLectern() && AllBlocks.LECTERN_CONTROLLER.get().getTileEntityOptional(mc.level, lecternPos)
+			.map(te -> !te.isUsedBy(mc.player))
+			.orElse(true)) {
+			deactivateInLectern();
+			return;
+		}
+
+		if (mc.screen != null) {
 			MODE = Mode.IDLE;
 			onReset();
 			return;
 		}
 
-		if (InputMappings.isKeyDown(mc.getWindow().getHandle(), GLFW.GLFW_KEY_ESCAPE)) {
+		if (InputMappings.isKeyDown(mc.getWindow().getWindow(), GLFW.GLFW_KEY_ESCAPE)) {
 			MODE = Mode.IDLE;
 			onReset();
 			return;
@@ -150,41 +181,41 @@ public class LinkedControllerClientHandler {
 		if (MODE == Mode.ACTIVE) {
 			// Released Keys
 			if (!releasedKeys.isEmpty()) {
-				AllPackets.channel.sendToServer(new LinkedControllerInputPacket(releasedKeys, false));
-				AllSoundEvents.CONTROLLER_CLICK.playAt(player.world, player.getBlockPos(), 1f, .5f, true);
+				AllPackets.channel.sendToServer(new LinkedControllerInputPacket(releasedKeys, false, lecternPos));
+				AllSoundEvents.CONTROLLER_CLICK.playAt(player.level, player.blockPosition(), 1f, .5f, true);
 			}
 
 			// Newly Pressed Keys
 			if (!newKeys.isEmpty()) {
-				AllPackets.channel.sendToServer(new LinkedControllerInputPacket(newKeys, true));
+				AllPackets.channel.sendToServer(new LinkedControllerInputPacket(newKeys, true, lecternPos));
 				packetCooldown = PACKET_RATE;
-				AllSoundEvents.CONTROLLER_CLICK.playAt(player.world, player.getBlockPos(), 1f, .75f, true);
+				AllSoundEvents.CONTROLLER_CLICK.playAt(player.level, player.blockPosition(), 1f, .75f, true);
 			}
 
 			// Keepalive Pressed Keys
 			if (packetCooldown == 0) {
 				if (!pressedKeys.isEmpty()) {
-					AllPackets.channel.sendToServer(new LinkedControllerInputPacket(pressedKeys, true));
+					AllPackets.channel.sendToServer(new LinkedControllerInputPacket(pressedKeys, true, lecternPos));
 					packetCooldown = PACKET_RATE;
 				}
 			}
 		}
 
 		if (MODE == Mode.BIND) {
-			VoxelShape shape = mc.world.getBlockState(selectedLocation)
-				.getShape(mc.world, selectedLocation);
+			VoxelShape shape = mc.level.getBlockState(selectedLocation)
+				.getShape(mc.level, selectedLocation);
 			if (!shape.isEmpty())
-				CreateClient.OUTLINER.showAABB("controller", shape.getBoundingBox()
-					.offset(selectedLocation))
+				CreateClient.OUTLINER.showAABB("controller", shape.bounds()
+					.move(selectedLocation))
 					.colored(0xB73C2D)
 					.lineWidth(1 / 16f);
 
 			for (Integer integer : newKeys) {
-				LinkBehaviour linkBehaviour = TileEntityBehaviour.get(mc.world, selectedLocation, LinkBehaviour.TYPE);
+				LinkBehaviour linkBehaviour = TileEntityBehaviour.get(mc.level, selectedLocation, LinkBehaviour.TYPE);
 				if (linkBehaviour != null) {
 					AllPackets.channel.sendToServer(new LinkedControllerBindPacket(integer, selectedLocation));
 					Lang.sendStatus(mc.player, "linked_controller.key_bound", controls.get(integer)
-						.getBoundKeyLocalizedText()
+						.getTranslatedKeyMessage()
 						.getString());
 				}
 				MODE = Mode.IDLE;
@@ -193,7 +224,7 @@ public class LinkedControllerClientHandler {
 		}
 
 		currentlyPressed = pressedKeys;
-		controls.forEach(kb -> kb.setPressed(false));
+		controls.forEach(kb -> kb.setDown(false));
 	}
 
 	public static void renderOverlay(MatrixStack ms, IRenderTypeBuffer buffer, int light, int overlay,
@@ -202,39 +233,43 @@ public class LinkedControllerClientHandler {
 			return;
 		Minecraft mc = Minecraft.getInstance();
 
-		ms.push();
+		ms.pushPose();
 		Screen tooltipScreen = new TooltipScreen(null);
 		tooltipScreen.init(mc, mc.getWindow()
-			.getScaledWidth(),
+			.getGuiScaledWidth(),
 			mc.getWindow()
-				.getScaledHeight());
+				.getGuiScaledHeight());
 
 		Object[] keys = new Object[6];
 		Vector<KeyBinding> controls = getControls();
 		for (int i = 0; i < controls.size(); i++) {
 			KeyBinding keyBinding = controls.get(i);
-			keys[i] = keyBinding.getBoundKeyLocalizedText()
+			keys[i] = keyBinding.getTranslatedKeyMessage()
 				.getString();
 		}
 
 		List<ITextComponent> list = new ArrayList<>();
 		list.add(Lang.createTranslationTextComponent("linked_controller.bind_mode")
-			.formatted(TextFormatting.GOLD));
+			.withStyle(TextFormatting.GOLD));
 		list.addAll(
 			TooltipHelper.cutTextComponent(Lang.createTranslationTextComponent("linked_controller.press_keybind", keys),
 				TextFormatting.GRAY, TextFormatting.GRAY));
 
 		int width = 0;
-		int height = list.size() * mc.fontRenderer.FONT_HEIGHT;
+		int height = list.size() * mc.font.lineHeight;
 		for (ITextComponent iTextComponent : list)
-			width = Math.max(width, mc.fontRenderer.getWidth(iTextComponent));
+			width = Math.max(width, mc.font.width(iTextComponent));
 		int x = (tooltipScreen.width / 3) - width / 2;
 		int y = tooltipScreen.height - height;
 
-		tooltipScreen.renderTooltip(ms, list, x, y);
+		tooltipScreen.renderComponentTooltip(ms, list, x, y);
 
-		ms.pop();
+		ms.popPose();
 
+	}
+
+	public enum Mode {
+		IDLE, ACTIVE, BIND
 	}
 
 }

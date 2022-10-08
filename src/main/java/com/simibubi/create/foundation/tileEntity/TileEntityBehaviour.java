@@ -1,5 +1,7 @@
 package com.simibubi.create.foundation.tileEntity;
 
+import java.util.ConcurrentModificationException;
+
 import com.simibubi.create.content.schematics.ItemRequirement;
 import com.simibubi.create.foundation.tileEntity.behaviour.BehaviourType;
 
@@ -43,9 +45,13 @@ public abstract class TileEntityBehaviour {
 
 	}
 
-	public boolean isSafeNBT() { return false; }
+	public boolean isSafeNBT() {
+		return false;
+	}
 
-	public ItemRequirement getRequiredItems() { return ItemRequirement.NONE; }
+	public ItemRequirement getRequiredItems() {
+		return ItemRequirement.NONE;
+	}
 
 	public void onBlockChanged(BlockState oldState) {
 
@@ -73,20 +79,26 @@ public abstract class TileEntityBehaviour {
 	}
 
 	public BlockPos getPos() {
-		return tileEntity.getPos();
+		return tileEntity.getBlockPos();
 	}
 
 	public World getWorld() {
-		return tileEntity.getWorld();
+		return tileEntity.getLevel();
 	}
 
 	public static <T extends TileEntityBehaviour> T get(IBlockReader reader, BlockPos pos, BehaviourType<T> type) {
-		return get(reader.getTileEntity(pos), type);
+		TileEntity te;
+		try {
+			te = reader.getBlockEntity(pos);
+		} catch (ConcurrentModificationException e) {
+			te = null;
+		}
+		return get(te, type);
 	}
 
 	public static <T extends TileEntityBehaviour> void destroy(IBlockReader reader, BlockPos pos,
 		BehaviourType<T> type) {
-		T behaviour = get(reader.getTileEntity(pos), type);
+		T behaviour = get(reader.getBlockEntity(pos), type);
 		if (behaviour != null)
 			behaviour.destroy();
 	}

@@ -13,7 +13,6 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.CompoundNBT;
 import net.minecraft.nbt.INBT;
 import net.minecraft.nbt.ListNBT;
-import net.minecraft.nbt.StringNBT;
 import net.minecraft.tileentity.MobSpawnerTileEntity;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.tileentity.TileEntityType;
@@ -55,14 +54,14 @@ public final class NBTProcessors {
 			ListNBT pages = tag.getList("pages", Constants.NBT.TAG_STRING);
 
 			for (INBT inbt : pages) {
-				if (textComponentHasClickEvent(inbt.getString()))
+				if (textComponentHasClickEvent(inbt.getAsString()))
 					return null;
 			}
 			return data;
 		});
 		addSurvivalProcessor(AllTileEntities.FUNNEL.get(), data -> {
 			if (data.contains("Filter")) {
-				ItemStack filter = ItemStack.read(data.getCompound("Filter"));
+				ItemStack filter = ItemStack.of(data.getCompound("Filter"));
 				if (filter.getItem() instanceof FilterItem)
 					data.remove("Filter");
 			}
@@ -75,7 +74,8 @@ public final class NBTProcessors {
 		return component != null && component.getStyle() != null && component.getStyle().getClickEvent() != null;
 	}
 
-	private NBTProcessors() {}
+	private NBTProcessors() {
+	}
 
 	@Nullable
 	public static CompoundNBT process(TileEntity tileEntity, CompoundNBT compound, boolean survival) {
@@ -90,7 +90,7 @@ public final class NBTProcessors {
 				.apply(compound);
 		if (tileEntity instanceof MobSpawnerTileEntity)
 			return compound;
-		if (tileEntity.onlyOpsCanSetNbt())
+		if (tileEntity.onlyOpCanSetNbt())
 			return null;
 		return compound;
 	}

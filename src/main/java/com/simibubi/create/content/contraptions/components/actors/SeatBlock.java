@@ -7,12 +7,11 @@ import javax.annotation.ParametersAreNonnullByDefault;
 
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllShapes;
-import com.simibubi.create.foundation.utility.DyeHelper;
+import com.simibubi.create.foundation.utility.BlockHelper;
 
 import mcp.MethodsReturnNonnullByDefault;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.MobEntity;
@@ -37,36 +36,38 @@ import net.minecraft.world.World;
 @MethodsReturnNonnullByDefault
 public class SeatBlock extends Block {
 
-	private final boolean inCreativeTab;
+	protected final DyeColor color;
+	protected final boolean inCreativeTab;
 
-	public SeatBlock(Properties p_i48440_1_, boolean inCreativeTab) {
-		super(p_i48440_1_);
+	public SeatBlock(Properties properties, DyeColor color, boolean inCreativeTab) {
+		super(properties);
+		this.color = color;
 		this.inCreativeTab = inCreativeTab;
 	}
 
 	@Override
-	public void fillItemGroup(ItemGroup group, NonNullList<ItemStack> p_149666_2_) {
-		if (group != ItemGroup.SEARCH && !inCreativeTab)
+	public void fillItemCategory(ItemGroup group, NonNullList<ItemStack> p_149666_2_) {
+		if (group != ItemGroup.TAB_SEARCH && !inCreativeTab)
 			return;
-		super.fillItemGroup(group, p_149666_2_);
+		super.fillItemCategory(group, p_149666_2_);
 	}
 
 	@Override
-	public void onFallenUpon(World p_180658_1_, BlockPos p_180658_2_, Entity p_180658_3_, float p_180658_4_) {
-		super.onFallenUpon(p_180658_1_, p_180658_2_, p_180658_3_, p_180658_4_ * 0.5F);
+	public void fallOn(World p_180658_1_, BlockPos p_180658_2_, Entity p_180658_3_, float p_180658_4_) {
+		super.fallOn(p_180658_1_, p_180658_2_, p_180658_3_, p_180658_4_ * 0.5F);
 	}
 
 	@Override
-	public void onLanded(IBlockReader reader, Entity entity) {
-		BlockPos pos = entity.getBlockPos();
-		if (entity instanceof PlayerEntity || !(entity instanceof LivingEntity) || !canBePickedUp(entity) || isSeatOccupied(entity.world, pos)) {
-			Blocks.PINK_BED.onLanded(reader, entity);
+	public void updateEntityAfterFallOn(IBlockReader reader, Entity entity) {
+		BlockPos pos = entity.blockPosition();
+		if (entity instanceof PlayerEntity || !(entity instanceof LivingEntity) || !canBePickedUp(entity) || isSeatOccupied(entity.level, pos)) {
+			super.updateEntityAfterFallOn(reader, entity);
 			return;
 		}
 		if (reader.getBlockState(pos)
 			.getBlock() != this)
 			return;
-		sitDown(entity.world, pos, entity);
+		sitDown(entity.level, pos, entity);
 	}
 
 	@Override
@@ -88,46 +89,42 @@ public class SeatBlock extends Block {
 	}
 
 	@Override
-	public ActionResultType onUse(BlockState state, World world, BlockPos pos, PlayerEntity player, Hand hand,
+	public ActionResultType use(BlockState state, World world, BlockPos pos, PlayerEntity player, Hand hand,
 		BlockRayTraceResult p_225533_6_) {
-		if (player.isSneaking())
+		if (player.isShiftKeyDown())
 			return ActionResultType.PASS;
 
-		ItemStack heldItem = player.getHeldItem(hand);
-		for (DyeColor color : DyeColor.values()) {
-			if (!heldItem.getItem()
-				.isIn(DyeHelper.getTagOfDye(color)))
-				continue;
-			if (world.isRemote)
+		ItemStack heldItem = player.getItemInHand(hand);
+		DyeColor color = DyeColor.getColor(heldItem);
+		if (color != null && color != this.color) {
+			if (world.isClientSide)
 				return ActionResultType.SUCCESS;
-
-			BlockState newState = AllBlocks.SEATS.get(color).getDefaultState();
-			if (newState != state)
-				world.setBlockState(pos, newState);
-			return ActionResultType.SUCCESS;
+			BlockState newState = BlockHelper.copyProperties(state, AllBlocks.SEATS.get(color).getDefaultState());
+			world.setBlockAndUpdate(pos, newState);
+			return ActionResultType.sidedSuccess(world.isClientSide);
 		}
 
-		List<SeatEntity> seats = world.getEntitiesWithinAABB(SeatEntity.class, new AxisAlignedBB(pos));
+		List<SeatEntity> seats = world.getEntitiesOfClass(SeatEntity.class, new AxisAlignedBB(pos));
 		if (!seats.isEmpty()) {
 			SeatEntity seatEntity = seats.get(0);
 			List<Entity> passengers = seatEntity.getPassengers();
 			if (!passengers.isEmpty() && passengers.get(0) instanceof PlayerEntity)
 				return ActionResultType.PASS;
-			if (!world.isRemote) {
-				seatEntity.removePassengers();
+			if (!world.isClientSide) {
+				seatEntity.ejectPassengers();
 				player.startRiding(seatEntity);
 			}
 			return ActionResultType.SUCCESS;
 		}
 
-		if (world.isRemote)
+		if (world.isClientSide)
 			return ActionResultType.SUCCESS;
 		sitDown(world, pos, player);
 		return ActionResultType.SUCCESS;
 	}
 
 	public static boolean isSeatOccupied(World world, BlockPos pos) {
-		return !world.getEntitiesWithinAABB(SeatEntity.class, new AxisAlignedBB(pos))
+		return !world.getEntitiesOfClass(SeatEntity.class, new AxisAlignedBB(pos))
 			.isEmpty();
 	}
 
@@ -136,17 +133,21 @@ public class SeatBlock extends Block {
 	}
 
 	public static void sitDown(World world, BlockPos pos, Entity entity) {
-		if (world.isRemote)
+		if (world.isClientSide)
 			return;
 		SeatEntity seat = new SeatEntity(world, pos);
-		seat.setPos(pos.getX() + .5f, pos.getY(), pos.getZ() + .5f);
-		world.addEntity(seat);
+		seat.setPosRaw(pos.getX() + .5f, pos.getY(), pos.getZ() + .5f);
+		world.addFreshEntity(seat);
 		entity.startRiding(seat, true);
 	}
 
+	public DyeColor getColor() {
+		return color;
+	}
+
 	@Override
-	public boolean allowsMovement(BlockState state, IBlockReader reader, BlockPos pos, PathType type) {
+	public boolean isPathfindable(BlockState state, IBlockReader reader, BlockPos pos, PathType type) {
 		return false;
 	}
-	
+
 }

@@ -1,19 +1,18 @@
 package com.simibubi.create.foundation.mixin;
 
-import com.simibubi.create.content.schematics.SchematicWorld;
-
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.world.World;
-import net.minecraftforge.client.model.ModelDataManager;
-
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.simibubi.create.content.schematics.SchematicWorld;
+
 import net.minecraft.client.Minecraft;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.world.World;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
+import net.minecraftforge.client.model.ModelDataManager;
 
 @OnlyIn(Dist.CLIENT)
 @Mixin(ModelDataManager.class)
@@ -28,8 +27,8 @@ public class ModelDataRefreshMixin {
 	@Inject(at = @At("HEAD"), method = "requestModelDataRefresh", cancellable = true, remap = false)
 	private static void requestModelDataRefresh(TileEntity te, CallbackInfo ci) {
 		if (te != null) {
-			World world = te.getWorld();
-			if (world != Minecraft.getInstance().world && world instanceof SchematicWorld)
+			World world = te.getLevel();
+			if (world != Minecraft.getInstance().level && world instanceof SchematicWorld)
 				ci.cancel();
 		}
 	}

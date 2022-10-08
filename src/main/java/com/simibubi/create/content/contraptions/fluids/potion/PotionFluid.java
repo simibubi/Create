@@ -16,6 +16,8 @@ import net.minecraft.potion.PotionUtils;
 import net.minecraft.potion.Potions;
 import net.minecraft.util.IItemProvider;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.text.ITextComponent;
+import net.minecraft.util.text.TranslationTextComponent;
 import net.minecraftforge.fluids.FluidAttributes;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -32,7 +34,7 @@ public class PotionFluid extends VirtualFluid {
 
 	public static FluidStack withEffects(int amount, Potion potion, List<EffectInstance> customEffects) {
 		FluidStack fluidStack = new FluidStack(AllFluids.POTION.get()
-			.getStillFluid(), amount);
+			.getSource(), amount);
 		addPotionToFluidStack(fluidStack, potion);
 		appendEffects(fluidStack, customEffects);
 		return fluidStack;
@@ -47,18 +49,23 @@ public class PotionFluid extends VirtualFluid {
 		@Override
 		public int getColor(FluidStack stack) {
 			CompoundNBT tag = stack.getOrCreateTag();
-			int color = PotionUtils.getPotionColorFromEffectList(PotionUtils.getEffectsFromTag(tag)) | 0xff000000;
+			int color = PotionUtils.getColor(PotionUtils.getAllEffects(tag)) | 0xff000000;
 			return color;
 		}
 
+		@Override
+		public ITextComponent getDisplayName(FluidStack stack) {
+			return new TranslationTextComponent(getTranslationKey(stack));
+		}
+		
 		@Override
 		public String getTranslationKey(FluidStack stack) {
 			CompoundNBT tag = stack.getOrCreateTag();
 			IItemProvider itemFromBottleType =
 				PotionFluidHandler.itemFromBottleType(NBTHelper.readEnum(tag, "Bottle", BottleType.class));
-			return PotionUtils.getPotionTypeFromNBT(tag)
-				.getNamePrefixed(itemFromBottleType.asItem()
-					.getTranslationKey() + ".effect.");
+			return PotionUtils.getPotion(tag)
+				.getName(itemFromBottleType.asItem()
+					.getDescriptionId() + ".effect.");
 		}
 
 	}
@@ -80,7 +87,7 @@ public class PotionFluid extends VirtualFluid {
 		CompoundNBT compoundnbt = fs.getOrCreateTag();
 		ListNBT listnbt = compoundnbt.getList("CustomPotionEffects", 9);
 		for (EffectInstance effectinstance : customEffects)
-			listnbt.add(effectinstance.write(new CompoundNBT()));
+			listnbt.add(effectinstance.save(new CompoundNBT()));
 		compoundnbt.put("CustomPotionEffects", listnbt);
 		return fs;
 	}

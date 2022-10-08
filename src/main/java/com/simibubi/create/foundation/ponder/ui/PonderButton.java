@@ -1,7 +1,5 @@
 package com.simibubi.create.foundation.ponder.ui;
 
-import java.awt.Color;
-
 import javax.annotation.Nonnull;
 
 import com.mojang.blaze3d.matrix.MatrixStack;
@@ -11,8 +9,9 @@ import com.simibubi.create.foundation.gui.Theme;
 import com.simibubi.create.foundation.gui.Theme.Key;
 import com.simibubi.create.foundation.gui.widgets.BoxWidget;
 import com.simibubi.create.foundation.gui.widgets.ElementWidget;
+import com.simibubi.create.foundation.ponder.content.PonderTag;
 import com.simibubi.create.foundation.utility.AnimationTickHolder;
-import com.simibubi.create.foundation.utility.ColorHelper;
+import com.simibubi.create.foundation.utility.Color;
 import com.simibubi.create.foundation.utility.animation.LerpedFloat;
 
 import net.minecraft.client.Minecraft;
@@ -23,6 +22,7 @@ import net.minecraft.util.math.MathHelper;
 public class PonderButton extends BoxWidget {
 
 	protected ItemStack item;
+	protected PonderTag tag;
 	protected KeyBinding shortcut;
 	protected LerpedFloat flash = LerpedFloat.linear().startWithValue(0).chase(0, 0.1f, LerpedFloat.Chaser.EXP);
 
@@ -41,6 +41,10 @@ public class PonderButton extends BoxWidget {
 		this.shortcut = key;
 		//noinspection unchecked
 		return (T) this;
+	}
+
+	public <T extends PonderButton> T showingTag(PonderTag tag) {
+		return showing(this.tag = tag);
 	}
 
 	public <T extends PonderButton> T showing(ItemStack item) {
@@ -77,12 +81,10 @@ public class PonderButton extends BoxWidget {
 		if (flashValue > .1f) {
 			float sin = 0.5f + 0.5f * MathHelper.sin((AnimationTickHolder.getTicks(true) + partialTicks) / 5f);
 			sin *= flashValue;
-			Color c1 = gradientColor1;
-			Color c2 = gradientColor2;
-			Color nc1 = new Color(255, 255, 255, MathHelper.clamp(c1.getAlpha() + 150, 0, 255));
-			Color nc2 = new Color(155, 155, 155, MathHelper.clamp(c2.getAlpha() + 150, 0, 255));
-			gradientColor1 = ColorHelper.mixColors(c1, nc1, sin);
-			gradientColor2 = ColorHelper.mixColors(c2, nc2, sin);
+			Color nc1 = new Color(255, 255, 255, MathHelper.clamp(gradientColor1.getAlpha() + 150, 0, 255));
+			Color nc2 = new Color(155, 155, 155, MathHelper.clamp(gradientColor2.getAlpha() + 150, 0, 255));
+			gradientColor1 = gradientColor1.mixWith(nc1, sin);
+			gradientColor2 = gradientColor2.mixWith(nc2, sin);
 		}
 	}
 
@@ -95,15 +97,19 @@ public class PonderButton extends BoxWidget {
 			return;
 
 		if (shortcut != null) {
-			ms.translate(0, 0, z+50);
-			drawCenteredText(ms, Minecraft.getInstance().fontRenderer, shortcut.getBoundKeyLocalizedText(), x + width / 2 + 8, y + height - 6, ColorHelper.applyAlpha(Theme.i(Theme.Key.TEXT_DARKER), fadeValue));
+			ms.translate(0, 0, z + 50);
+			drawCenteredString(ms, Minecraft.getInstance().font, shortcut.getTranslatedKeyMessage(), x + width / 2 + 8, y + height - 6, Theme.c(Theme.Key.TEXT_DARKER).scaleAlpha(fadeValue).getRGB());
 		}
 	}
 
 	public ItemStack getItem() {
 		return item;
 	}
-	
+
+	public PonderTag getTag() {
+		return tag;
+	}
+
 	@Override
 	public Key getDisabledTheme() {
 		return Theme.Key.PONDER_BUTTON_DISABLE;
@@ -118,10 +124,10 @@ public class PonderButton extends BoxWidget {
 	public Key getHoverTheme() {
 		return Theme.Key.PONDER_BUTTON_HOVER;
 	}
-	
+
 	@Override
 	public Key getClickTheme() {
 		return Theme.Key.PONDER_BUTTON_CLICK;
 	}
-	
+
 }

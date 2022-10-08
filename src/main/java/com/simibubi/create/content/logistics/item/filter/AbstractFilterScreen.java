@@ -45,8 +45,8 @@ public abstract class AbstractFilterScreen<F extends AbstractFilterContainer> ex
 		super.init();
 		widgets.clear();
 
-		int x = guiLeft;
-		int y = guiTop;
+		int x = leftPos;
+		int y = topPos;
 
 		resetButton = new IconButton(x + background.width - 62, y + background.height - 24, AllIcons.I_TRASH);
 		confirmButton = new IconButton(x + background.width - 33, y + background.height - 24, AllIcons.I_CONFIRM);
@@ -61,19 +61,17 @@ public abstract class AbstractFilterScreen<F extends AbstractFilterContainer> ex
 
 	@Override
 	protected void renderWindow(MatrixStack ms, int mouseX, int mouseY, float partialTicks) {
-		int invLeft = guiLeft - windowXOffset + (xSize - PLAYER_INVENTORY.width) / 2;
-		int invTop = guiTop + background.height + 4;
+		int invX = getLeftOfCentered(PLAYER_INVENTORY.width);
+		int invY = topPos + background.height + 4;
+		renderPlayerInventory(ms, invX, invY);
 
-		PLAYER_INVENTORY.draw(ms, this, invLeft, invTop);
-		textRenderer.draw(ms, playerInventory.getDisplayName(), invLeft + 8, invTop + 6, 0x404040);
-
-		int x = guiLeft;
-		int y = guiTop;
+		int x = leftPos;
+		int y = topPos;
 
 		background.draw(ms, this, x, y);
-		drawCenteredText(ms, textRenderer, title, x + (background.width - 8) / 2, y + 3, 0xFFFFFF);
+		drawCenteredString(ms, font, title, x + (background.width - 8) / 2, y + 3, 0xFFFFFF);
 
-		GuiGameElement.of(container.contentHolder)
+		GuiGameElement.of(menu.contentHolder)
 				.<GuiGameElement.GuiRenderBuilder>at(x + background.width, y + background.height - 56, -200)
 				.scale(5)
 				.render(ms);
@@ -85,9 +83,9 @@ public abstract class AbstractFilterScreen<F extends AbstractFilterContainer> ex
 		super.tick();
 		handleIndicators();
 
-		if (!container.player.getHeldItemMainhand()
-			.equals(container.contentHolder, false))
-			client.player.closeScreen();
+		if (!menu.player.getMainHandItem()
+				.equals(menu.contentHolder, false))
+			minecraft.player.closeContainer();
 	}
 
 	public void handleIndicators() {
@@ -144,13 +142,13 @@ public abstract class AbstractFilterScreen<F extends AbstractFilterContainer> ex
 
 		if (button == 0) {
 			if (confirmButton.isHovered()) {
-				client.player.closeScreen();
+				minecraft.player.closeContainer();
 				return true;
 			}
 			if (resetButton.isHovered()) {
-				container.clearContents();
+				menu.clearContents();
 				contentsCleared();
-				container.sendClearPacket();
+				menu.sendClearPacket();
 				return true;
 			}
 		}

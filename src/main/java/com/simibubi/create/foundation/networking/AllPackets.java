@@ -21,16 +21,24 @@ import com.simibubi.create.content.contraptions.components.structureMovement.tra
 import com.simibubi.create.content.contraptions.components.structureMovement.train.capability.MinecartControllerUpdatePacket;
 import com.simibubi.create.content.contraptions.fluids.actors.FluidSplashPacket;
 import com.simibubi.create.content.contraptions.relays.advanced.sequencer.ConfigureSequencedGearshiftPacket;
+import com.simibubi.create.content.curiosities.bell.SoulPulseEffectPacket;
+import com.simibubi.create.content.curiosities.symmetry.ConfigureSymmetryWandPacket;
 import com.simibubi.create.content.curiosities.symmetry.SymmetryEffectPacket;
+import com.simibubi.create.content.curiosities.toolbox.ToolboxDisposeAllPacket;
+import com.simibubi.create.content.curiosities.toolbox.ToolboxEquipPacket;
 import com.simibubi.create.content.curiosities.tools.BlueprintAssignCompleteRecipePacket;
 import com.simibubi.create.content.curiosities.tools.ExtendoGripInteractionPacket;
+import com.simibubi.create.content.curiosities.weapons.PotatoCannonPacket;
+import com.simibubi.create.content.curiosities.weapons.PotatoProjectileTypeManager;
 import com.simibubi.create.content.curiosities.zapper.ZapperBeamPacket;
+import com.simibubi.create.content.curiosities.zapper.terrainzapper.ConfigureWorldshaperPacket;
 import com.simibubi.create.content.logistics.block.depot.EjectorElytraPacket;
 import com.simibubi.create.content.logistics.block.depot.EjectorPlacementPacket;
 import com.simibubi.create.content.logistics.block.depot.EjectorTriggerPacket;
 import com.simibubi.create.content.logistics.block.mechanicalArm.ArmPlacementPacket;
 import com.simibubi.create.content.logistics.item.LinkedControllerBindPacket;
 import com.simibubi.create.content.logistics.item.LinkedControllerInputPacket;
+import com.simibubi.create.content.logistics.item.LinkedControllerStopLecternPacket;
 import com.simibubi.create.content.logistics.item.filter.FilterScreenPacket;
 import com.simibubi.create.content.logistics.packet.ConfigureFlexcratePacket;
 import com.simibubi.create.content.logistics.packet.ConfigureStockswitchPacket;
@@ -64,12 +72,11 @@ import net.minecraftforge.fml.network.simple.SimpleChannel;
 public enum AllPackets {
 
 	// Client to Server
-	NBT(NbtPacket.class, NbtPacket::new, PLAY_TO_SERVER),
 	CONFIGURE_SCHEMATICANNON(ConfigureSchematicannonPacket.class, ConfigureSchematicannonPacket::new, PLAY_TO_SERVER),
 	CONFIGURE_FLEXCRATE(ConfigureFlexcratePacket.class, ConfigureFlexcratePacket::new, PLAY_TO_SERVER),
 	CONFIGURE_STOCKSWITCH(ConfigureStockswitchPacket.class, ConfigureStockswitchPacket::new, PLAY_TO_SERVER),
 	CONFIGURE_SEQUENCER(ConfigureSequencedGearshiftPacket.class, ConfigureSequencedGearshiftPacket::new,
-		PLAY_TO_SERVER),
+			PLAY_TO_SERVER),
 	PLACE_SCHEMATIC(SchematicPlacePacket.class, SchematicPlacePacket::new, PLAY_TO_SERVER),
 	UPLOAD_SCHEMATIC(SchematicUploadPacket.class, SchematicUploadPacket::new, PLAY_TO_SERVER),
 	CLEAR_CONTAINER(ClearContainerPacket.class, ClearContainerPacket::new, PLAY_TO_SERVER),
@@ -89,9 +96,14 @@ public enum AllPackets {
 	EJECTOR_ELYTRA(EjectorElytraPacket.class, EjectorElytraPacket::new, PLAY_TO_SERVER),
 	LINKED_CONTROLLER_INPUT(LinkedControllerInputPacket.class, LinkedControllerInputPacket::new, PLAY_TO_SERVER),
 	LINKED_CONTROLLER_BIND(LinkedControllerBindPacket.class, LinkedControllerBindPacket::new, PLAY_TO_SERVER),
+	LINKED_CONTROLLER_USE_LECTERN(LinkedControllerStopLecternPacket.class, LinkedControllerStopLecternPacket::new, PLAY_TO_SERVER),
 	C_CONFIGURE_CONFIG(CConfigureConfigPacket.class, CConfigureConfigPacket::new, PLAY_TO_SERVER),
 	SUBMIT_GHOST_ITEM(GhostItemSubmitPacket.class, GhostItemSubmitPacket::new, PLAY_TO_SERVER),
 	BLUEPRINT_COMPLETE_RECIPE(BlueprintAssignCompleteRecipePacket.class, BlueprintAssignCompleteRecipePacket::new, PLAY_TO_SERVER),
+	CONFIGURE_SYMMETRY_WAND(ConfigureSymmetryWandPacket.class, ConfigureSymmetryWandPacket::new, PLAY_TO_SERVER),
+	CONFIGURE_WORLDSHAPER(ConfigureWorldshaperPacket.class, ConfigureWorldshaperPacket::new, PLAY_TO_SERVER),
+	TOOLBOX_EQUIP(ToolboxEquipPacket.class, ToolboxEquipPacket::new, PLAY_TO_SERVER),
+	TOOLBOX_DISPOSE_ALL(ToolboxDisposeAllPacket.class, ToolboxDisposeAllPacket::new, PLAY_TO_SERVER),
 
 	// Server to Client
 	SYMMETRY_EFFECT(SymmetryEffectPacket.class, SymmetryEffectPacket::new, PLAY_TO_CLIENT),
@@ -110,17 +122,20 @@ public enum AllPackets {
 	BLOCK_HIGHLIGHT(HighlightPacket.class, HighlightPacket::new, PLAY_TO_CLIENT),
 	TUNNEL_FLAP(TunnelFlapPacket.class, TunnelFlapPacket::new, PLAY_TO_CLIENT),
 	FUNNEL_FLAP(FunnelFlapPacket.class, FunnelFlapPacket::new, PLAY_TO_CLIENT),
+	POTATO_CANNON(PotatoCannonPacket.class, PotatoCannonPacket::new, PLAY_TO_CLIENT),
+	SOUL_PULSE(SoulPulseEffectPacket.class, SoulPulseEffectPacket::new, PLAY_TO_CLIENT),
 	PERSISTENT_DATA(ISyncPersistentData.Packet.class, ISyncPersistentData.Packet::new, PLAY_TO_CLIENT),
+	SYNC_POTATO_PROJECTILE_TYPES(PotatoProjectileTypeManager.SyncPacket.class, PotatoProjectileTypeManager.SyncPacket::new, PLAY_TO_CLIENT),
 
 	;
 
-	public static final ResourceLocation CHANNEL_NAME = new ResourceLocation(Create.ID, "network");
-	public static final String NETWORK_VERSION = new ResourceLocation(Create.ID, "1").toString();
+	public static final ResourceLocation CHANNEL_NAME = Create.asResource("network");
+	public static final String NETWORK_VERSION = Create.asResource("1").toString();
 	public static SimpleChannel channel;
 
 	private LoadedPacket<?> packet;
 
-	private <T extends SimplePacketBase> AllPackets(Class<T> type, Function<PacketBuffer, T> factory,
+	<T extends SimplePacketBase> AllPackets(Class<T> type, Function<PacketBuffer, T> factory,
 		NetworkDirection direction) {
 		packet = new LoadedPacket<>(type, factory, direction);
 	}
@@ -137,7 +152,7 @@ public enum AllPackets {
 
 	public static void sendToNear(World world, BlockPos pos, int range, Object message) {
 		channel.send(PacketDistributor.NEAR
-			.with(TargetPoint.p(pos.getX(), pos.getY(), pos.getZ(), range, world.getRegistryKey())), message);
+			.with(TargetPoint.p(pos.getX(), pos.getY(), pos.getZ(), range, world.dimension())), message);
 	}
 
 	private static class LoadedPacket<T extends SimplePacketBase> {

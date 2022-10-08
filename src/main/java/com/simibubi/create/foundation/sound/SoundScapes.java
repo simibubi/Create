@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.function.BiFunction;
 
 import com.simibubi.create.AllSoundEvents;
+import com.simibubi.create.foundation.config.AllConfigs;
 import com.simibubi.create.foundation.utility.AnimationTickHolder;
 import com.simibubi.create.foundation.utility.Pair;
 
@@ -29,8 +30,8 @@ public class SoundScapes {
 
 		KINETIC(SoundScapes::kinetic),
 		COG(SoundScapes::cogwheel),
-	
-		SAW((p, g) -> new SoundScape(p, g).repeating(AllSoundEvents.SAW_IDLE.getMainEvent(), 1f, .95f, 1))
+		CRUSHING(SoundScapes::crushing),
+		MILLING(SoundScapes::milling),
 
 		;
 
@@ -47,11 +48,22 @@ public class SoundScapes {
 	}
 
 	private static SoundScape kinetic(float pitch, AmbienceGroup group) {
-		return new SoundScape(pitch, group).continuous(SoundEvents.ENTITY_MINECART_INSIDE, .25f, 1);
+		return new SoundScape(pitch, group).continuous(SoundEvents.MINECART_INSIDE, .25f, 1);
 	}
 
 	private static SoundScape cogwheel(float pitch, AmbienceGroup group) {
 		return new SoundScape(pitch, group).continuous(AllSoundEvents.COGS.getMainEvent(), 1.5f, 1);
+	}
+
+	private static SoundScape crushing(float pitch, AmbienceGroup group) {
+		return new SoundScape(pitch, group).repeating(AllSoundEvents.CRUSHING_1.getMainEvent(), 1.545f, .75f, 1)
+			.repeating(AllSoundEvents.CRUSHING_2.getMainEvent(), 0.425f, .75f, 2)
+			.repeating(AllSoundEvents.CRUSHING_3.getMainEvent(), 2f, 1.75f, 2);
+	}
+	
+	private static SoundScape milling(float pitch, AmbienceGroup group) {
+		return new SoundScape(pitch, group).repeating(AllSoundEvents.CRUSHING_1.getMainEvent(), 1.545f, .75f, 1)
+			.repeating(AllSoundEvents.CRUSHING_2.getMainEvent(), 0.425f, .75f, 2);
 	}
 
 	enum PitchGroup {
@@ -62,6 +74,8 @@ public class SoundScapes {
 	private static Map<Pair<AmbienceGroup, PitchGroup>, SoundScape> activeSounds = new HashMap<>();
 
 	public static void play(AmbienceGroup group, BlockPos pos, float pitch) {
+		if (!AllConfigs.CLIENT.enableAmbientSounds.get())
+			return;
 		if (!outOfRange(pos))
 			addSound(group, pos, pitch);
 	}
@@ -73,6 +87,7 @@ public class SoundScapes {
 		if (AnimationTickHolder.getTicks() % UPDATE_INTERVAL != 0)
 			return;
 
+		boolean disable = !AllConfigs.CLIENT.enableAmbientSounds.get();
 		for (Iterator<Entry<Pair<AmbienceGroup, PitchGroup>, SoundScape>> iterator = activeSounds.entrySet()
 			.iterator(); iterator.hasNext();) {
 
@@ -80,7 +95,7 @@ public class SoundScapes {
 			Pair<AmbienceGroup, PitchGroup> key = entry.getKey();
 			SoundScape value = entry.getValue();
 
-			if (getSoundCount(key.getFirst(), key.getSecond()) == 0) {
+			if (disable || getSoundCount(key.getFirst(), key.getSecond()) == 0) {
 				value.remove();
 				iterator.remove();
 			}
@@ -105,22 +120,21 @@ public class SoundScapes {
 		});
 	}
 
-	public static void clean() {
-		BlockPos playerLocation = getCameraPos();
-		for (Map<PitchGroup, Set<BlockPos>> map : counter.values())
-			for (Set<BlockPos> set : map.values())
-				set.removeIf(p -> !playerLocation.withinDistance(p, MAX_AMBIENT_SOURCE_DISTANCE));
+	public static void invalidateAll() {
+		counter.clear();
+		activeSounds.forEach(($, sound) -> sound.remove());
+		activeSounds.clear();
 	}
 
 	protected static boolean outOfRange(BlockPos pos) {
-		return !getCameraPos().withinDistance(pos, MAX_AMBIENT_SOURCE_DISTANCE);
+		return !getCameraPos().closerThan(pos, MAX_AMBIENT_SOURCE_DISTANCE);
 	}
 
 	protected static BlockPos getCameraPos() {
-		Entity renderViewEntity = Minecraft.getInstance().renderViewEntity;
+		Entity renderViewEntity = Minecraft.getInstance().cameraEntity;
 		if (renderViewEntity == null)
 			return BlockPos.ZERO;
-		BlockPos playerLocation = renderViewEntity.getBlockPos();
+		BlockPos playerLocation = renderViewEntity.blockPosition();
 		return playerLocation;
 	}
 

@@ -11,12 +11,10 @@ import net.minecraft.inventory.container.Container;
 import net.minecraft.inventory.container.INamedContainerProvider;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.network.PacketBuffer;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.tileentity.TileEntityType;
 import net.minecraft.util.Direction;
 import net.minecraft.util.text.ITextComponent;
-import net.minecraft.util.text.StringTextComponent;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.util.LazyOptional;
 import net.minecraftforge.items.CapabilityItemHandler;
@@ -49,7 +47,7 @@ public class AdjustableCrateTileEntity extends CrateTileEntity implements INamed
 		@Override
 		protected void onContentsChanged(int slot) {
 			super.onContentsChanged(slot);
-			markDirty();
+			setChanged();
 
 			itemCount = 0;
 			for (int i = 0; i < getSlots(); i++) {
@@ -79,7 +77,7 @@ public class AdjustableCrateTileEntity extends CrateTileEntity implements INamed
 	public AdjustableCrateTileEntity getOtherCrate() {
 		if (!AllBlocks.ADJUSTABLE_CRATE.has(getBlockState()))
 			return null;
-		TileEntity tileEntity = world.getTileEntity(pos.offset(getFacing()));
+		TileEntity tileEntity = level.getBlockEntity(worldPosition.relative(getFacing()));
 		if (tileEntity instanceof AdjustableCrateTileEntity)
 			return (AdjustableCrateTileEntity) tileEntity;
 		return null;
@@ -140,7 +138,7 @@ public class AdjustableCrateTileEntity extends CrateTileEntity implements INamed
 	}
 
 	private void drop(int slot) {
-		InventoryHelper.spawnItemStack(world, pos.getX(), pos.getY(), pos.getZ(), inventory.getStackInSlot(slot));
+		InventoryHelper.dropItemStack(level, worldPosition.getX(), worldPosition.getY(), worldPosition.getZ(), inventory.getStackInSlot(slot));
 	}
 
 	@Override
@@ -163,14 +161,9 @@ public class AdjustableCrateTileEntity extends CrateTileEntity implements INamed
 		return Lang.translate("gui.adjustable_crate.title");
 	}
 
-	public void sendToContainer(PacketBuffer buffer) {
-		buffer.writeBlockPos(getPos());
-		buffer.writeCompoundTag(getUpdateTag());
-	}
-
 	@Override
-	public void remove() {
-		super.remove();
+	public void setRemoved() {
+		super.setRemoved();
 		invHandler.invalidate();
 	}
 

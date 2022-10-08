@@ -7,6 +7,8 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import com.jozufozu.flywheel.backend.instancing.IInstanceRendered;
+import com.jozufozu.flywheel.backend.instancing.InstancedRenderDispatcher;
 import com.simibubi.create.Create;
 import com.simibubi.create.content.contraptions.KineticNetwork;
 import com.simibubi.create.content.contraptions.RotationPropagator;
@@ -16,10 +18,9 @@ import com.simibubi.create.content.contraptions.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.contraptions.goggles.IHaveHoveringInformation;
 import com.simibubi.create.content.contraptions.relays.elementary.ICogWheel;
 import com.simibubi.create.content.contraptions.relays.gearbox.GearboxBlock;
+import com.simibubi.create.foundation.block.BlockStressValues;
 import com.simibubi.create.foundation.config.AllConfigs;
 import com.simibubi.create.foundation.item.TooltipHelper;
-import com.simibubi.create.foundation.render.backend.FastRenderDispatcher;
-import com.simibubi.create.foundation.render.backend.instancing.IInstanceRendered;
 import com.simibubi.create.foundation.sound.SoundScapes;
 import com.simibubi.create.foundation.sound.SoundScapes.AmbienceGroup;
 import com.simibubi.create.foundation.tileEntity.SmartTileEntity;
@@ -78,7 +79,7 @@ public abstract class KineticTileEntity extends SmartTileEntity
 
 	@Override
 	public void initialize() {
-		if (hasNetwork() && !world.isRemote) {
+		if (hasNetwork() && !level.isClientSide) {
 			KineticNetwork network = getOrCreateNetwork();
 			if (!network.initialized)
 				network.initFromTE(capacity, stress, networkSize);
@@ -90,13 +91,13 @@ public abstract class KineticTileEntity extends SmartTileEntity
 
 	@Override
 	public void tick() {
-		if (!world.isRemote && needsSpeedUpdate())
+		if (!level.isClientSide && needsSpeedUpdate())
 			attachKinetics();
 
 		super.tick();
 		effects.tick();
 
-		if (world.isRemote) {
+		if (level.isClientSide) {
 			cachedBoundingBox = null; // cache the bounding box for every frame between ticks
 			DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> this.tickAudio());
 			return;
@@ -124,10 +125,10 @@ public abstract class KineticTileEntity extends SmartTileEntity
 				return;
 			}
 
-			if (!world.isBlockPresent(source))
+			if (!level.isLoaded(source))
 				return;
 
-			TileEntity tileEntity = world.getTileEntity(source);
+			TileEntity tileEntity = level.getBlockEntity(source);
 			KineticTileEntity sourceTe =
 				tileEntity instanceof KineticTileEntity ? (KineticTileEntity) tileEntity : null;
 			if (sourceTe == null || sourceTe.speed == 0) {
@@ -160,20 +161,20 @@ public abstract class KineticTileEntity extends SmartTileEntity
 		}
 	}
 
-	public float calculateAddedStressCapacity() {
-		float capacity = (float) AllConfigs.SERVER.kinetics.stressValues.getCapacityOf(getStressConfigKey());
-		this.lastCapacityProvided = capacity;
-		return capacity;
-	}
-
 	protected Block getStressConfigKey() {
 		return getBlockState().getBlock();
 	}
 
 	public float calculateStressApplied() {
-		float impact = (float) AllConfigs.SERVER.kinetics.stressValues.getImpactOf(getStressConfigKey());
+		float impact = (float) BlockStressValues.getImpact(getStressConfigKey());
 		this.lastStressApplied = impact;
 		return impact;
+	}
+
+	public float calculateAddedStressCapacity() {
+		float capacity = (float) BlockStressValues.getCapacity(getStressConfigKey());
+		this.lastCapacityProvided = capacity;
+		return capacity;
 	}
 
 	public void onSpeedChanged(float previousSpeed) {
@@ -184,13 +185,13 @@ public abstract class KineticTileEntity extends SmartTileEntity
 	}
 
 	@Override
-	public void remove() {
-		if (!world.isRemote) {
+	public void setRemoved() {
+		if (!level.isClientSide) {
 			if (hasNetwork())
 				getOrCreateNetwork().remove(this);
 			detachKinetics();
 		}
-		super.remove();
+		super.setRemoved();
 	}
 
 	@Override
@@ -258,7 +259,7 @@ public abstract class KineticTileEntity extends SmartTileEntity
 			effects.triggerOverStressedEffect();
 
 		if (clientPacket)
-			FastRenderDispatcher.enqueueUpdate(this);
+			DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> InstancedRenderDispatcher.enqueueUpdate(this));
 	}
 
 	public float getGeneratedSpeed() {
@@ -289,10 +290,10 @@ public abstract class KineticTileEntity extends SmartTileEntity
 
 	public void setSource(BlockPos source) {
 		this.source = source;
-		if (world == null || world.isRemote)
+		if (level == null || level.isClientSide)
 			return;
 
-		TileEntity tileEntity = world.getTileEntity(source);
+		TileEntity tileEntity = level.getBlockEntity(source);
 		if (!(tileEntity instanceof KineticTileEntity)) {
 			removeSource();
 			return;
@@ -339,11 +340,11 @@ public abstract class KineticTileEntity extends SmartTileEntity
 
 	public void attachKinetics() {
 		updateSpeed = false;
-		RotationPropagator.handleAdded(world, pos, this);
+		RotationPropagator.handleAdded(level, worldPosition, this);
 	}
 
 	public void detachKinetics() {
-		RotationPropagator.handleRemoved(world, pos, this);
+		RotationPropagator.handleRemoved(level, worldPosition, this);
 	}
 
 	public boolean isSpeedRequirementFulfilled() {
@@ -362,17 +363,17 @@ public abstract class KineticTileEntity extends SmartTileEntity
 	}
 
 	public static void switchToBlockState(World world, BlockPos pos, BlockState state) {
-		if (world.isRemote)
+		if (world.isClientSide)
 			return;
 
-		TileEntity tileEntityIn = world.getTileEntity(pos);
+		TileEntity tileEntityIn = world.getBlockEntity(pos);
 		BlockState currentState = world.getBlockState(pos);
 		boolean isKinetic = tileEntityIn instanceof KineticTileEntity;
 
 		if (currentState == state)
 			return;
 		if (tileEntityIn == null || !isKinetic) {
-			world.setBlockState(pos, state, 3);
+			world.setBlock(pos, state, 3);
 			return;
 		}
 
@@ -386,7 +387,7 @@ public abstract class KineticTileEntity extends SmartTileEntity
 			tileEntity.removeSource();
 		}
 
-		world.setBlockState(pos, state, 3);
+		world.setBlock(pos, state, 3);
 	}
 
 	@Override
@@ -397,27 +398,27 @@ public abstract class KineticTileEntity extends SmartTileEntity
 		boolean notFastEnough = !isSpeedRequirementFulfilled() && getSpeed() != 0;
 
 		if (overStressed && AllConfigs.CLIENT.enableOverstressedTooltip.get()) {
-			tooltip.add(componentSpacing.copy()
+			tooltip.add(componentSpacing.plainCopy()
 				.append(Lang.translate("gui.stressometer.overstressed")
-					.formatted(GOLD)));
+					.withStyle(GOLD)));
 			ITextComponent hint = Lang.translate("gui.contraptions.network_overstressed");
 			List<ITextComponent> cutString = TooltipHelper.cutTextComponent(hint, GRAY, TextFormatting.WHITE);
 			for (int i = 0; i < cutString.size(); i++)
-				tooltip.add(componentSpacing.copy()
+				tooltip.add(componentSpacing.plainCopy()
 					.append(cutString.get(i)));
 			return true;
 		}
 
 		if (notFastEnough) {
-			tooltip.add(componentSpacing.copy()
+			tooltip.add(componentSpacing.plainCopy()
 				.append(Lang.translate("tooltip.speedRequirement")
-					.formatted(GOLD)));
+					.withStyle(GOLD)));
 			ITextComponent hint =
-				Lang.translate("gui.contraptions.not_fast_enough", I18n.format(getBlockState().getBlock()
-					.getTranslationKey()));
+				Lang.translate("gui.contraptions.not_fast_enough", I18n.get(getBlockState().getBlock()
+					.getDescriptionId()));
 			List<ITextComponent> cutString = TooltipHelper.cutTextComponent(hint, GRAY, TextFormatting.WHITE);
 			for (int i = 0; i < cutString.size(); i++)
-				tooltip.add(componentSpacing.copy()
+				tooltip.add(componentSpacing.plainCopy()
 					.append(cutString.get(i)));
 			return true;
 		}
@@ -431,21 +432,21 @@ public abstract class KineticTileEntity extends SmartTileEntity
 		float stressAtBase = calculateStressApplied();
 
 		if (calculateStressApplied() != 0 && StressImpact.isEnabled()) {
-			tooltip.add(componentSpacing.copy()
+			tooltip.add(componentSpacing.plainCopy()
 				.append(Lang.translate("gui.goggles.kinetic_stats")));
-			tooltip.add(componentSpacing.copy()
+			tooltip.add(componentSpacing.plainCopy()
 				.append(Lang.translate("tooltip.stressImpact")
-					.formatted(TextFormatting.GRAY)));
+					.withStyle(TextFormatting.GRAY)));
 
 			float stressTotal = stressAtBase * Math.abs(getTheoreticalSpeed());
 
-			tooltip.add(componentSpacing.copy()
+			tooltip.add(componentSpacing.plainCopy()
 				.append(new StringTextComponent(" " + IHaveGoggleInformation.format(stressTotal))
 					.append(Lang.translate("generic.unit.stress"))
 					.append(" ")
-					.formatted(TextFormatting.AQUA))
+					.withStyle(TextFormatting.AQUA))
 				.append(Lang.translate("gui.goggles.at_current_speed")
-					.formatted(TextFormatting.DARK_GRAY)));
+					.withStyle(TextFormatting.DARK_GRAY)));
 
 			added = true;
 		}
@@ -477,9 +478,13 @@ public abstract class KineticTileEntity extends SmartTileEntity
 		return d.getAxisDirection() == AxisDirection.POSITIVE ? axisSpeed : -axisSpeed;
 	}
 
-	public static float convertToLinear(float speed) { return speed / 512f; }
+	public static float convertToLinear(float speed) {
+		return speed / 512f;
+	}
 
-	public static float convertToAngular(float speed) { return speed * 3 / 10f; }
+	public static float convertToAngular(float speed) {
+		return speed * 3 / 10f;
+	}
 
 	public boolean isOverStressed() {
 		return overStressed;
@@ -522,13 +527,13 @@ public abstract class KineticTileEntity extends SmartTileEntity
 			return neighbours;
 
 		Axis axis = block.getRotationAxis(state);
-		BlockPos.getAllInBox(new BlockPos(-1, -1, -1), new BlockPos(1, 1, 1))
+		BlockPos.betweenClosedStream(new BlockPos(-1, -1, -1), new BlockPos(1, 1, 1))
 			.forEach(offset -> {
-				if (axis.getCoordinate(offset.getX(), offset.getY(), offset.getZ()) != 0)
+				if (axis.choose(offset.getX(), offset.getY(), offset.getZ()) != 0)
 					return;
-				if (offset.distanceSq(0, 0, 0, false) != BlockPos.ZERO.distanceSq(1, 1, 0, false))
+				if (offset.distSqr(0, 0, 0, false) != BlockPos.ZERO.distSqr(1, 1, 0, false))
 					return;
-				neighbours.add(pos.add(offset));
+				neighbours.add(worldPosition.offset(offset));
 			});
 		return neighbours;
 	}
@@ -556,9 +561,8 @@ public abstract class KineticTileEntity extends SmartTileEntity
 	@Override
 	public void requestModelDataUpdate() {
 		super.requestModelDataUpdate();
-		if (!this.removed) {
-			FastRenderDispatcher.enqueueUpdate(this);
-		}
+		if (!this.remove)
+			DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> InstancedRenderDispatcher.enqueueUpdate(this));
 	}
 
 	protected AxisAlignedBB cachedBoundingBox;
@@ -583,15 +587,16 @@ public abstract class KineticTileEntity extends SmartTileEntity
 		float pitch = MathHelper.clamp((componentSpeed / 256f) + .45f, .85f, 1f);
 
 		if (isNoisy())
-			SoundScapes.play(AmbienceGroup.KINETIC, pos, pitch);
+			SoundScapes.play(AmbienceGroup.KINETIC, worldPosition, pitch);
 
 		Block block = getBlockState().getBlock();
 		if (ICogWheel.isSmallCog(block) || ICogWheel.isLargeCog(block) || block instanceof GearboxBlock)
-			SoundScapes.play(AmbienceGroup.COG, pos, pitch);
+			SoundScapes.play(AmbienceGroup.COG, worldPosition, pitch);
 	}
 
 	protected boolean isNoisy() {
 		return true;
 	}
+
 
 }

@@ -5,10 +5,10 @@ import java.util.Optional;
 import com.simibubi.create.AllContainerTypes;
 import com.simibubi.create.content.curiosities.tools.BlueprintEntity.BlueprintSection;
 import com.simibubi.create.foundation.gui.GhostItemContainer;
-import com.simibubi.create.foundation.gui.IClearableContainer;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.inventory.CraftingInventory;
@@ -25,7 +25,7 @@ import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.SlotItemHandler;
 
-public class BlueprintContainer extends GhostItemContainer<BlueprintSection> implements IClearableContainer {
+public class BlueprintContainer extends GhostItemContainer<BlueprintSection> {
 
 	public BlueprintContainer(ContainerType<?> type, int id, PlayerInventory inv, PacketBuffer extraData) {
 		super(type, id, inv, extraData);
@@ -46,7 +46,7 @@ public class BlueprintContainer extends GhostItemContainer<BlueprintSection> imp
 
 	@Override
 	protected void addSlots() {
-		addPlayerSlots(9, 131);
+		addPlayerSlots(8, 131);
 
 		int x = 29;
 		int y = 21;
@@ -60,50 +60,50 @@ public class BlueprintContainer extends GhostItemContainer<BlueprintSection> imp
 	}
 
 	public void onCraftMatrixChanged() {
-		if (contentHolder.getBlueprintWorld().isRemote)
+		if (contentHolder.getBlueprintWorld().isClientSide)
 			return;
 
 		ServerPlayerEntity serverplayerentity = (ServerPlayerEntity) player;
 		CraftingInventory craftingInventory = new BlueprintCraftingInventory(this, ghostInventory);
 		Optional<ICraftingRecipe> optional = player.getServer()
-			.getRecipeManager()
-			.getRecipe(IRecipeType.CRAFTING, craftingInventory, player.getEntityWorld());
+				.getRecipeManager()
+				.getRecipeFor(IRecipeType.CRAFTING, craftingInventory, player.getCommandSenderWorld());
 
 		if (!optional.isPresent()) {
 			if (ghostInventory.getStackInSlot(9)
-				.isEmpty())
+					.isEmpty())
 				return;
 			if (!contentHolder.inferredIcon)
 				return;
 
 			ghostInventory.setStackInSlot(9, ItemStack.EMPTY);
-			serverplayerentity.connection.sendPacket(new SSetSlotPacket(windowId, 36 + 9, ItemStack.EMPTY));
+			serverplayerentity.connection.send(new SSetSlotPacket(containerId, 36 + 9, ItemStack.EMPTY));
 			contentHolder.inferredIcon = false;
 			return;
 		}
 
 		ICraftingRecipe icraftingrecipe = optional.get();
-		ItemStack itemstack = icraftingrecipe.getCraftingResult(craftingInventory);
+		ItemStack itemstack = icraftingrecipe.assemble(craftingInventory);
 		ghostInventory.setStackInSlot(9, itemstack);
 		contentHolder.inferredIcon = true;
 		ItemStack toSend = itemstack.copy();
 		toSend.getOrCreateTag()
-			.putBoolean("InferredFromRecipe", true);
-		serverplayerentity.connection.sendPacket(new SSetSlotPacket(windowId, 36 + 9, toSend));
+				.putBoolean("InferredFromRecipe", true);
+		serverplayerentity.connection.send(new SSetSlotPacket(containerId, 36 + 9, toSend));
 	}
 
 	@Override
-	public void putStackInSlot(int p_75141_1_, ItemStack p_75141_2_) {
+	public void setItem(int p_75141_1_, ItemStack p_75141_2_) {
 		if (p_75141_1_ == 36 + 9) {
 			if (p_75141_2_.hasTag()) {
 				contentHolder.inferredIcon = p_75141_2_.getTag()
-					.getBoolean("InferredFromRecipe");
+						.getBoolean("InferredFromRecipe");
 				p_75141_2_.getTag()
-					.remove("InferredFromRecipe");
+						.remove("InferredFromRecipe");
 			} else
 				contentHolder.inferredIcon = false;
 		}
-		super.putStackInSlot(p_75141_1_, p_75141_2_);
+		super.setItem(p_75141_1_, p_75141_2_);
 	}
 
 	@Override
@@ -112,7 +112,9 @@ public class BlueprintContainer extends GhostItemContainer<BlueprintSection> imp
 	}
 
 	@Override
-	protected void readData(BlueprintSection contentHolder) {}
+	protected void initAndReadInventory(BlueprintSection contentHolder) {
+		super.initAndReadInventory(contentHolder);
+	}
 
 	@Override
 	protected void saveData(BlueprintSection contentHolder) {
@@ -124,12 +126,17 @@ public class BlueprintContainer extends GhostItemContainer<BlueprintSection> imp
 	protected BlueprintSection createOnClient(PacketBuffer extraData) {
 		int entityID = extraData.readVarInt();
 		int section = extraData.readVarInt();
-		Entity entityByID = Minecraft.getInstance().world.getEntityByID(entityID);
+		Entity entityByID = Minecraft.getInstance().level.getEntity(entityID);
 		if (!(entityByID instanceof BlueprintEntity))
 			return null;
 		BlueprintEntity blueprintEntity = (BlueprintEntity) entityByID;
 		BlueprintSection blueprintSection = blueprintEntity.getSection(section);
 		return blueprintSection;
+	}
+
+	@Override
+	public boolean stillValid(PlayerEntity player) {
+		return contentHolder != null && contentHolder.canPlayerUse(player);
 	}
 
 	static class BlueprintCraftingInventory extends CraftingInventory {
@@ -139,7 +146,7 @@ public class BlueprintContainer extends GhostItemContainer<BlueprintSection> imp
 			for (int y = 0; y < 3; y++) {
 				for (int x = 0; x < 3; x++) {
 					ItemStack stack = items.getStackInSlot(y * 3 + x);
-					setInventorySlotContents(y * 3 + x, stack == null ? ItemStack.EMPTY : stack.copy());
+					setItem(y * 3 + x, stack == null ? ItemStack.EMPTY : stack.copy());
 				}
 			}
 		}
@@ -156,12 +163,12 @@ public class BlueprintContainer extends GhostItemContainer<BlueprintSection> imp
 		}
 
 		@Override
-		public void onSlotChanged() {
-			super.onSlotChanged();
-			if (index == 9 && getHasStack() && !contentHolder.getBlueprintWorld().isRemote) {
+		public void setChanged() {
+			super.setChanged();
+			if (index == 9 && hasItem() && !contentHolder.getBlueprintWorld().isClientSide) {
 				contentHolder.inferredIcon = false;
 				ServerPlayerEntity serverplayerentity = (ServerPlayerEntity) player;
-				serverplayerentity.connection.sendPacket(new SSetSlotPacket(windowId, 36 + 9, getStack()));
+				serverplayerentity.connection.send(new SSetSlotPacket(containerId, 36 + 9, getItem()));
 			}
 			if (index < 9)
 				onCraftMatrixChanged();

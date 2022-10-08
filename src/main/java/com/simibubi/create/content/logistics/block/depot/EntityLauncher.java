@@ -24,7 +24,7 @@ public class EntityLauncher {
 
 	public void clamp(int max) {
 		set(Math.min(horizontalDistance, max),
-			MathHelper.signum(verticalDistance) * Math.min(Math.abs(verticalDistance), max));
+			MathHelper.sign(verticalDistance) * Math.min(Math.abs(verticalDistance), max));
 	}
 
 	public void set(int horizontalDistance, int verticalDistance) {
@@ -36,7 +36,7 @@ public class EntityLauncher {
 	public void applyMotion(Entity entity, Direction facing) {
 		Vector3d motionVec = new Vector3d(0, yMotion, xMotion);
 		motionVec = VecHelper.rotate(motionVec, AngleHelper.horizontalAngle(facing), Axis.Y);
-		entity.setMotion(motionVec.x * .91, motionVec.y * .98, motionVec.z * .91);
+		entity.setDeltaMovement(motionVec.x * .91, motionVec.y * .98, motionVec.z * .91);
 	}
 
 	public int getHorizontalDistance() {
@@ -53,7 +53,14 @@ public class EntityLauncher {
 
 	public Vector3d getGlobalPos(double t, Direction d, BlockPos launcher) {
 		Vector3d start = new Vector3d(launcher.getX() + .5f, launcher.getY() + .5f, launcher.getZ() + .5f);
-		Vector3d vec = new Vector3d(0, y(t), x(t));
+
+		float xt = x(t);
+		float yt = y(t);
+		double progress = MathHelper.clamp(t / getTotalFlyingTicks(), 0, 1);
+		double correctionStrength = Math.pow(progress, 3);
+
+		Vector3d vec = new Vector3d(0, yt + (verticalDistance - yt) * correctionStrength * 0.5f,
+			xt + (horizontalDistance - xt) * correctionStrength);
 		return VecHelper.rotate(vec, 180 + AngleHelper.horizontalAngle(d), Axis.Y)
 			.add(start);
 	}

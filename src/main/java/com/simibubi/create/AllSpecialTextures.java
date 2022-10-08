@@ -18,13 +18,13 @@ public enum AllSpecialTextures {
 	private ResourceLocation location;
 
 	private AllSpecialTextures(String filename) {
-		location = new ResourceLocation(Create.ID, ASSET_PATH + filename);
+		location = Create.asResource(ASSET_PATH + filename);
 	}
 
 	public void bind() {
 		Minecraft.getInstance()
 			.getTextureManager()
-			.bindTexture(location);
+			.bind(location);
 	}
 
 	public ResourceLocation getLocation() {

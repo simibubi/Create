@@ -2,6 +2,7 @@ package com.simibubi.create;
 
 import javax.annotation.Nullable;
 
+import com.simibubi.create.AllTags.AllFluidTags;
 import com.simibubi.create.content.contraptions.fluids.VirtualFluid;
 import com.simibubi.create.content.contraptions.fluids.potion.PotionFluid;
 import com.simibubi.create.content.contraptions.fluids.potion.PotionFluid.PotionFluidAttributes;
@@ -25,50 +26,42 @@ public class AllFluids {
 
 	private static final CreateRegistrate REGISTRATE = Create.registrate();
 
-	public static FluidEntry<PotionFluid> POTION =
-		REGISTRATE.virtualFluid("potion", PotionFluidAttributes::new, PotionFluid::new)
-			.lang(f -> "fluid.create.potion", "Potion")
+	public static final FluidEntry<PotionFluid> POTION =
+			REGISTRATE.virtualFluid("potion", PotionFluidAttributes::new, PotionFluid::new)
+					.lang(f -> "fluid.create.potion", "Potion")
+					.register();
+
+	public static final FluidEntry<VirtualFluid> TEA = REGISTRATE.virtualFluid("tea")
+			.lang(f -> "fluid.create.tea", "Builder's Tea")
+			.tag(AllTags.forgeFluidTag("tea"))
 			.register();
 
-	public static FluidEntry<VirtualFluid> TEA = REGISTRATE.virtualFluid("tea")
-		.lang(f -> "fluid.create.tea", "Builder's Tea")
-		.tag(AllTags.forgeFluidTag("tea"))
-		.register();
+	public static final FluidEntry<ForgeFlowingFluid.Flowing> HONEY =
+			REGISTRATE.standardFluid("honey", NoColorFluidAttributes::new)
+					.lang(f -> "fluid.create.honey", "Honey")
+					.attributes(b -> b.viscosity(2000)
+							.density(1400))
+					.properties(p -> p.levelDecreasePerBlock(2)
+							.tickRate(25)
+							.slopeFindDistance(3)
+							.explosionResistance(100f))
+					.tag(AllFluidTags.HONEY.tag)
+					.bucket()
+					.tag(AllTags.forgeItemTag("buckets/honey"))
+					.build()
+					.register();
 
-	public static FluidEntry<VirtualFluid> MILK = REGISTRATE.virtualFluid("milk")
-		.lang(f -> "fluid.create.milk", "Milk")
-		.tag(AllTags.forgeFluidTag("milk"))
-		.register();
-
-	public static FluidEntry<ForgeFlowingFluid.Flowing> HONEY =
-		REGISTRATE.standardFluid("honey", NoColorFluidAttributes::new)
-			.lang(f -> "fluid.create.honey", "Honey")
-			.attributes(b -> b.viscosity(500)
-				.density(1400))
-			.properties(p -> p.levelDecreasePerBlock(2)
-				.tickRate(25)
-				.slopeFindDistance(3)
-				.explosionResistance(100f))
-			.tag(AllTags.forgeFluidTag("honey"))
-			.bucket()
-			.properties(p -> p.maxStackSize(1))
-			.build()
-			.register();
-
-	public static FluidEntry<ForgeFlowingFluid.Flowing> CHOCOLATE =
-		REGISTRATE.standardFluid("chocolate", NoColorFluidAttributes::new)
-			.lang(f -> "fluid.create.chocolate", "Chocolate")
-			.tag(AllTags.forgeFluidTag("chocolate"))
-			.attributes(b -> b.viscosity(500)
-				.density(1400))
-			.properties(p -> p.levelDecreasePerBlock(2)
-				.tickRate(25)
-				.slopeFindDistance(3)
-				.explosionResistance(100f))
-			.bucket()
-			.properties(p -> p.maxStackSize(1))
-			.build()
-			.register();
+	public static final FluidEntry<ForgeFlowingFluid.Flowing> CHOCOLATE =
+			REGISTRATE.standardFluid("chocolate", NoColorFluidAttributes::new)
+					.lang(f -> "fluid.create.chocolate", "Chocolate")
+					.tag(AllTags.forgeFluidTag("chocolate"))
+					.attributes(b -> b.viscosity(1500)
+							.density(1400))
+					.properties(p -> p.levelDecreasePerBlock(2)
+							.tickRate(25)
+							.slopeFindDistance(3)
+							.explosionResistance(100f))
+					.register();
 
 	// Load this class
 
@@ -80,18 +73,18 @@ public class AllFluids {
 	@OnlyIn(Dist.CLIENT)
 	private static void makeTranslucent(FluidEntry<?> entry) {
 		ForgeFlowingFluid fluid = entry.get();
-		RenderTypeLookup.setRenderLayer(fluid, RenderType.getTranslucent());
-		RenderTypeLookup.setRenderLayer(fluid.getStillFluid(), RenderType.getTranslucent());
+		RenderTypeLookup.setRenderLayer(fluid, RenderType.translucent());
+		RenderTypeLookup.setRenderLayer(fluid.getSource(), RenderType.translucent());
 	}
 
 	@Nullable
 	public static BlockState getLavaInteraction(FluidState fluidState) {
-		Fluid fluid = fluidState.getFluid();
-		if (fluid.isEquivalentTo(HONEY.get()))
+		Fluid fluid = fluidState.getType();
+		if (fluid.isSame(HONEY.get()))
 			return fluidState.isSource() ? AllPaletteBlocks.LIMESTONE.getDefaultState()
 				: AllPaletteBlocks.LIMESTONE_VARIANTS.registeredBlocks.get(0)
 					.getDefaultState();
-		if (fluid.isEquivalentTo(CHOCOLATE.get()))
+		if (fluid.isSame(CHOCOLATE.get()))
 			return fluidState.isSource() ? AllPaletteBlocks.SCORIA.getDefaultState()
 				: AllPaletteBlocks.SCORIA_VARIANTS.registeredBlocks.get(0)
 					.getDefaultState();
@@ -114,5 +107,5 @@ public class AllFluids {
 		}
 
 	}
-
+	
 }

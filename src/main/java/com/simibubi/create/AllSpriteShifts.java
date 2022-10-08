@@ -78,12 +78,12 @@ public class AllSpriteShifts {
 	//
 
 	private static void populateMaps() {
-		WoodType[] supportedWoodTypes = new WoodType[]{
+		WoodType[] supportedWoodTypes = new WoodType[] {
 			WoodType.OAK, WoodType.SPRUCE, WoodType.BIRCH, WoodType.ACACIA, WoodType.JUNGLE, WoodType.DARK_OAK,
 			WoodType.CRIMSON, WoodType.WARPED
 		};
 		Arrays.stream(supportedWoodTypes)
-			.forEach(woodType -> WOODEN_WINDOWS.put(woodType, vertical("palettes/" + woodType.getName() + "_window")));
+			.forEach(woodType -> WOODEN_WINDOWS.put(woodType, vertical("palettes/" + woodType.name() + "_window")));
 
 		for (PaletteStoneVariants paletteStoneVariants : PaletteStoneVariants.values()) {
 			String variantName = Lang.asId(paletteStoneVariants.name());
@@ -98,7 +98,7 @@ public class AllSpriteShifts {
 		}
 
 		for (DyeColor color : DyeColor.values()) {
-			String id = color.getString();
+			String id = color.getSerializedName();
 			DYED_BELTS.put(color, SpriteShifter.get("block/belt", "block/belt/" + id + "_scroll"));
 			DYED_OFFSET_BELTS.put(color, SpriteShifter.get("block/belt_offset", "block/belt/" + id + "_scroll"));
 			DYED_DIAGONAL_BELTS.put(color,

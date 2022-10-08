@@ -38,13 +38,18 @@ public class BeltDeployerCallbacks {
 		if (deployerTileEntity.mode == Mode.PUNCH)
 			return ProcessingResult.PASS;
 		BlockState blockState = deployerTileEntity.getBlockState();
-		if (!blockState.contains(FACING) || blockState.get(FACING) != Direction.DOWN)
+		if (!blockState.hasProperty(FACING) || blockState.getValue(FACING) != Direction.DOWN)
 			return ProcessingResult.PASS;
 		if (deployerTileEntity.state != State.WAITING)
 			return ProcessingResult.HOLD;
 		if (deployerTileEntity.redstoneLocked)
 			return ProcessingResult.PASS;
 
+		DeployerFakePlayer player = deployerTileEntity.getPlayer();
+		ItemStack held = player == null ? ItemStack.EMPTY : player.getMainHandItem();
+
+		if (held.isEmpty())
+			return ProcessingResult.HOLD;
 		if (deployerTileEntity.getRecipe(s.stack) == null)
 			return ProcessingResult.PASS;
 
@@ -58,8 +63,14 @@ public class BeltDeployerCallbacks {
 		if (deployerTileEntity.getSpeed() == 0)
 			return ProcessingResult.PASS;
 		BlockState blockState = deployerTileEntity.getBlockState();
-		if (!blockState.contains(FACING) || blockState.get(FACING) != Direction.DOWN)
+		if (!blockState.hasProperty(FACING) || blockState.getValue(FACING) != Direction.DOWN)
 			return ProcessingResult.PASS;
+
+		DeployerFakePlayer player = deployerTileEntity.getPlayer();
+		ItemStack held = player == null ? ItemStack.EMPTY : player.getMainHandItem();
+		if (held.isEmpty())
+			return ProcessingResult.HOLD;
+
 		IRecipe<?> recipe = deployerTileEntity.getRecipe(s.stack);
 		if (recipe == null)
 			return ProcessingResult.PASS;
@@ -68,10 +79,10 @@ public class BeltDeployerCallbacks {
 			activate(s, i, deployerTileEntity, recipe);
 			return ProcessingResult.HOLD;
 		}
-		
+
 		if (deployerTileEntity.state == State.WAITING) {
 			if (deployerTileEntity.redstoneLocked)
-				return ProcessingResult.PASS;			
+				return ProcessingResult.PASS;
 			deployerTileEntity.start();
 		}
 
@@ -92,6 +103,10 @@ public class BeltDeployerCallbacks {
 					copy.angle = centered ? 180 : Create.RANDOM.nextInt(360);
 					return copy;
 				})
+				.map(t -> {
+					t.locked = false;
+					return t;
+				})
 				.collect(Collectors.toList());
 
 		TransportedItemStack left = transported.copy();
@@ -103,17 +118,24 @@ public class BeltDeployerCallbacks {
 		else
 			handler.handleProcessingOnItem(transported, TransportedResult.convertToAndLeaveHeld(collect, left));
 
-		ItemStack heldItem = deployerTileEntity.player.getHeldItemMainhand();
-		if (heldItem.isDamageable())
-			heldItem.damageItem(1, deployerTileEntity.player, s -> s.sendBreakAnimation(Hand.MAIN_HAND));
-		else
-			heldItem.shrink(1);
+		ItemStack heldItem = deployerTileEntity.player.getMainHandItem();
+		boolean unbreakable = heldItem.hasTag() && heldItem.getTag()
+			.getBoolean("Unbreakable");
+		boolean keepHeld =
+			recipe instanceof DeployerApplicationRecipe && ((DeployerApplicationRecipe) recipe).shouldKeepHeldItem();
 
-		BlockPos pos = deployerTileEntity.getPos();
-		World world = deployerTileEntity.getWorld();
+		if (!unbreakable && !keepHeld) {
+			if (heldItem.isDamageableItem())
+				heldItem.hurtAndBreak(1, deployerTileEntity.player, s -> s.broadcastBreakEvent(Hand.MAIN_HAND));
+			else
+				heldItem.shrink(1);
+		}
+
+		BlockPos pos = deployerTileEntity.getBlockPos();
+		World world = deployerTileEntity.getLevel();
 		if (heldItem.isEmpty())
-			world.playSound(null, pos, SoundEvents.ENTITY_ITEM_BREAK, SoundCategory.BLOCKS, .25f, 1);
-		world.playSound(null, pos, SoundEvents.ENTITY_ITEM_PICKUP, SoundCategory.BLOCKS, .25f, .75f);
+			world.playSound(null, pos, SoundEvents.ITEM_BREAK, SoundCategory.BLOCKS, .25f, 1);
+		world.playSound(null, pos, SoundEvents.ITEM_PICKUP, SoundCategory.BLOCKS, .25f, .75f);
 		if (recipe instanceof SandPaperPolishingRecipe)
 			AllSoundEvents.AUTO_POLISH.playOnServer(world, pos, .25f, 1f);
 

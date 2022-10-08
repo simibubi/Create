@@ -21,9 +21,9 @@ public interface ITE<T extends TileEntity> {
 
 	default ActionResultType onTileEntityUse(IBlockReader world, BlockPos pos, Function<T, ActionResultType> action) {
 		return getTileEntityOptional(world, pos).map(action)
-			.orElse(ActionResultType.PASS);
+				.orElse(ActionResultType.PASS);
 	}
-	
+
 	default Optional<T> getTileEntityOptional(IBlockReader world, BlockPos pos) {
 		return Optional.ofNullable(getTileEntity(world, pos));
 	}
@@ -31,7 +31,7 @@ public interface ITE<T extends TileEntity> {
 	@Nullable
 	@SuppressWarnings("unchecked")
 	default T getTileEntity(IBlockReader worldIn, BlockPos pos) {
-		TileEntity tileEntity = worldIn.getTileEntity(pos);
+		TileEntity tileEntity = worldIn.getBlockEntity(pos);
 		Class<T> expectedClass = getTileEntityClass();
 
 		if (tileEntity == null)

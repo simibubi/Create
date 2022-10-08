@@ -37,11 +37,12 @@ public class LinkedControllerScreen extends AbstractSimiContainerScreen<LinkedCo
 	@Override
 	protected void init() {
 		setWindowSize(background.width, background.height + 4 + PLAYER_INVENTORY.height);
+		setWindowOffset(2 + (width % 2 == 0 ? 0 : -1), 0);
 		super.init();
 		widgets.clear();
 
-		int x = guiLeft;
-		int y = guiTop;
+		int x = leftPos;
+		int y = topPos;
 
 		resetButton = new IconButton(x + background.width - 62, y + background.height - 24, AllIcons.I_TRASH);
 		confirmButton = new IconButton(x + background.width - 33, y + background.height - 24, AllIcons.I_CONFIRM);
@@ -56,19 +57,17 @@ public class LinkedControllerScreen extends AbstractSimiContainerScreen<LinkedCo
 
 	@Override
 	protected void renderWindow(MatrixStack ms, int mouseX, int mouseY, float partialTicks) {
-		int invLeft = guiLeft - windowXOffset + (xSize - PLAYER_INVENTORY.width) / 2;
-		int invTop = guiTop + background.height + 4;
+		int invX = getLeftOfCentered(PLAYER_INVENTORY.width);
+		int invY = topPos + background.height + 4;
+		renderPlayerInventory(ms, invX, invY);
 
-		PLAYER_INVENTORY.draw(ms, this, invLeft, invTop);
-		textRenderer.draw(ms, playerInventory.getDisplayName(), invLeft + 8, invTop + 6, 0x404040);
-
-		int x = guiLeft;
-		int y = guiTop;
+		int x = leftPos;
+		int y = topPos;
 
 		background.draw(ms, this, x, y);
-		textRenderer.draw(ms, title, x + 15, y + 4, 0x442000);
+		font.draw(ms, title, x + 15, y + 4, 0x442000);
 
-		GuiGameElement.of(container.mainItem)
+		GuiGameElement.of(menu.mainItem)
 			.<GuiGameElement.GuiRenderBuilder>at(x + background.width - 4, y + background.height - 56, -200)
 			.scale(5)
 			.render(ms);
@@ -77,9 +76,9 @@ public class LinkedControllerScreen extends AbstractSimiContainerScreen<LinkedCo
 	@Override
 	public void tick() {
 		super.tick();
-		if (!container.player.getHeldItemMainhand()
-			.equals(container.mainItem, false))
-			client.player.closeScreen();
+		if (!menu.player.getMainHandItem()
+			.equals(menu.mainItem, false))
+			minecraft.player.closeContainer();
 	}
 
 	@Override
@@ -88,12 +87,12 @@ public class LinkedControllerScreen extends AbstractSimiContainerScreen<LinkedCo
 
 		if (button == 0) {
 			if (confirmButton.isHovered()) {
-				client.player.closeScreen();
+				minecraft.player.closeContainer();
 				return true;
 			}
 			if (resetButton.isHovered()) {
-				container.clearContents();
-				container.sendClearPacket();
+				menu.clearContents();
+				menu.sendClearPacket();
 				return true;
 			}
 		}
@@ -102,20 +101,20 @@ public class LinkedControllerScreen extends AbstractSimiContainerScreen<LinkedCo
 	}
 
 	@Override
-	protected void drawMouseoverTooltip(MatrixStack ms, int x, int y) {
-		if (!this.client.player.inventory.getItemStack()
-			.isEmpty() || this.hoveredSlot == null || this.hoveredSlot.getHasStack()
-			|| hoveredSlot.inventory == container.playerInventory) {
-			super.drawMouseoverTooltip(ms, x, y);
+	protected void renderTooltip(MatrixStack ms, int x, int y) {
+		if (!this.minecraft.player.inventory.getCarried()
+			.isEmpty() || this.hoveredSlot == null || this.hoveredSlot.hasItem()
+			|| hoveredSlot.container == menu.playerInventory) {
+			super.renderTooltip(ms, x, y);
 			return;
 		}
-		renderWrappedToolTip(ms, addToTooltip(new LinkedList<>(), hoveredSlot.getSlotIndex()), x, y, textRenderer);
+		renderWrappedToolTip(ms, addToTooltip(new LinkedList<>(), hoveredSlot.getSlotIndex()), x, y, font);
 	}
 
 	@Override
 	public List<ITextComponent> getTooltipFromItem(ItemStack stack) {
 		List<ITextComponent> list = super.getTooltipFromItem(stack);
-		if (hoveredSlot.inventory == container.playerInventory)
+		if (hoveredSlot.container == menu.playerInventory)
 			return list;
 		return hoveredSlot != null ? addToTooltip(list, hoveredSlot.getSlotIndex()) : list;
 	}
@@ -127,9 +126,9 @@ public class LinkedControllerScreen extends AbstractSimiContainerScreen<LinkedCo
 			.createTranslationTextComponent("linked_controller.frequency_slot_" + ((slot % 2) + 1),
 				LinkedControllerClientHandler.getControls()
 					.get(slot / 2)
-					.getBoundKeyLocalizedText()
+					.getTranslatedKeyMessage()
 					.getString())
-			.formatted(TextFormatting.GOLD));
+			.withStyle(TextFormatting.GOLD));
 		return list;
 	}
 

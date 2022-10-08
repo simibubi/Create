@@ -7,8 +7,6 @@ import java.util.function.Predicate;
 
 import javax.annotation.Nullable;
 
-import net.minecraft.item.Item;
-
 import org.apache.commons.lang3.mutable.MutableInt;
 
 import com.simibubi.create.foundation.config.AllConfigs;
@@ -28,7 +26,7 @@ public class ItemHelper {
 
 	public static void dropContents(World world, BlockPos pos, IItemHandler inv) {
 		for (int slot = 0; slot < inv.getSlots(); slot++)
-			InventoryHelper.spawnItemStack(world, pos.getX(), pos.getY(), pos.getZ(), inv.getStackInSlot(slot));
+			InventoryHelper.dropItemStack(world, pos.getX(), pos.getY(), pos.getZ(), inv.getStackInSlot(slot));
 	}
 
 	public static List<ItemStack> multipliedOutput(ItemStack in, ItemStack out) {
@@ -100,8 +98,8 @@ public class ItemHelper {
 		Ingredients: for (Ingredient igd : recipeIngredients) {
 			for (Pair<Ingredient, MutableInt> pair : actualIngredients) {
 				ItemStack[] stacks1 = pair.getFirst()
-					.getMatchingStacks();
-				ItemStack[] stacks2 = igd.getMatchingStacks();
+					.getItems();
+				ItemStack[] stacks2 = igd.getItems();
 				if (stacks1.length != stacks2.length)
 					continue;
 				for (int i = 0; i <= stacks1.length; i++) {
@@ -110,7 +108,7 @@ public class ItemHelper {
 							.increment();
 						continue Ingredients;
 					}
-					if (!ItemStack.areItemStacksEqual(stacks1[i], stacks2[i]))
+					if (!ItemStack.matches(stacks1[i], stacks2[i]))
 						break;
 				}
 			}
@@ -120,11 +118,11 @@ public class ItemHelper {
 	}
 
 	public static boolean matchIngredients(Ingredient i1, Ingredient i2) {
-		ItemStack[] stacks1 = i1.getMatchingStacks();
-		ItemStack[] stacks2 = i2.getMatchingStacks();
+		ItemStack[] stacks1 = i1.getItems();
+		ItemStack[] stacks2 = i2.getItems();
 		if (stacks1.length == stacks2.length) {
 			for (int i = 0; i < stacks1.length; i++)
-				if (!ItemStack.areItemsEqual(stacks1[i], stacks2[i]))
+				if (!ItemStack.isSame(stacks1[i], stacks2[i]))
 					return false;
 			return true;
 		}
@@ -157,7 +155,10 @@ public class ItemHelper {
 			extracting = ItemStack.EMPTY;
 
 			for (int slot = 0; slot < inv.getSlots(); slot++) {
-				ItemStack stack = inv.extractItem(slot, maxExtractionCount - extracting.getCount(), true);
+				int amountToExtractFromThisSlot =
+					Math.min(maxExtractionCount - extracting.getCount(), inv.getStackInSlot(slot)
+						.getMaxStackSize());
+				ItemStack stack = inv.extractItem(slot, amountToExtractFromThisSlot, true);
 
 				if (stack.isEmpty())
 					continue;
@@ -244,7 +245,7 @@ public class ItemHelper {
 	}
 
 	public static boolean canItemStackAmountsStack(ItemStack a, ItemStack b) {
-		return ItemHandlerHelper.canItemStacksStack(a,b) && a.getCount() + b.getCount() <= a.getMaxStackSize();
+		return ItemHandlerHelper.canItemStacksStack(a, b) && a.getCount() + b.getCount() <= a.getMaxStackSize();
 	}
 
 	public static ItemStack findFirstMatch(IItemHandler inv, Predicate<ItemStack> test) {

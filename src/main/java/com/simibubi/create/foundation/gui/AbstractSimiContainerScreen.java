@@ -7,6 +7,8 @@ import java.util.List;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 
+import org.lwjgl.opengl.GL11;
+
 import com.mojang.blaze3d.matrix.MatrixStack;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.simibubi.create.foundation.gui.widgets.AbstractSimiWidget;
@@ -42,8 +44,8 @@ public abstract class AbstractSimiContainerScreen<T extends Container> extends C
 	}
 
 	protected void setWindowSize(int width, int height) {
-		this.xSize = width;
-		this.ySize = height;
+		this.imageWidth = width;
+		this.imageHeight = height;
 	}
 
 	protected void setWindowOffset(int xOffset, int yOffset) {
@@ -54,12 +56,12 @@ public abstract class AbstractSimiContainerScreen<T extends Container> extends C
 	@Override
 	protected void init() {
 		super.init();
-		guiLeft += windowXOffset;
-		guiTop += windowYOffset;
+		leftPos += windowXOffset;
+		topPos += windowYOffset;
 	}
 
 	@Override
-	protected void drawForeground(MatrixStack p_230451_1_, int p_230451_2_, int p_230451_3_) {
+	protected void renderLabels(MatrixStack p_230451_1_, int p_230451_2_, int p_230451_3_) {
 		// no-op to prevent screen- and inventory-title from being rendered at incorrect location
 		// could also set this.titleX/Y and this.playerInventoryTitleX/Y to the proper values instead
 	}
@@ -67,7 +69,7 @@ public abstract class AbstractSimiContainerScreen<T extends Container> extends C
 	@Override
 	public void render(MatrixStack matrixStack, int mouseX, int mouseY, float partialTicks) {
 		partialTicks = Minecraft.getInstance()
-			.getRenderPartialTicks();
+			.getFrameTime();
 		renderBackground(matrixStack);
 		renderWindow(matrixStack, mouseX, mouseY, partialTicks);
 
@@ -79,7 +81,7 @@ public abstract class AbstractSimiContainerScreen<T extends Container> extends C
 		RenderSystem.enableAlphaTest();
 		RenderSystem.enableBlend();
 		RenderSystem.disableRescaleNormal();
-		RenderHelper.disableStandardItemLighting();
+		RenderHelper.turnOff();
 		RenderSystem.disableLighting();
 		RenderSystem.disableDepthTest();
 		renderWindowForeground(matrixStack, mouseX, mouseY, partialTicks);
@@ -105,8 +107,8 @@ public abstract class AbstractSimiContainerScreen<T extends Container> extends C
 		if (super.keyPressed(code, p_keyPressed_2_, p_keyPressed_3_))
 			return true;
 
-		InputMappings.Input mouseKey = InputMappings.getInputByCode(code, p_keyPressed_2_);
-		if (this.client.gameSettings.keyBindInventory.isActiveAndMatches(mouseKey)) {
+		InputMappings.Input mouseKey = InputMappings.getKey(code, p_keyPressed_2_);
+		if (this.minecraft.options.keyInventory.isActiveAndMatches(mouseKey)) {
 			this.onClose();
 			return true;
 		}
@@ -141,32 +143,21 @@ public abstract class AbstractSimiContainerScreen<T extends Container> extends C
 		return result | super.mouseReleased(x, y, button);
 	}
 
-	@Override
-	public boolean shouldCloseOnEsc() {
-		return true;
-	}
-
-	@Override
-	public boolean isPauseScreen() {
-		return false;
-	}
-
 	protected abstract void renderWindow(MatrixStack ms, int mouseX, int mouseY, float partialTicks);
 
 	@Override
-	protected void drawBackground(MatrixStack p_230450_1_, float p_230450_2_, int p_230450_3_, int p_230450_4_) {
-
+	protected void renderBg(MatrixStack p_230450_1_, float p_230450_2_, int p_230450_3_, int p_230450_4_) {
 	}
 
 	protected void renderWindowForeground(MatrixStack matrixStack, int mouseX, int mouseY, float partialTicks) {
-		drawMouseoverTooltip(matrixStack, mouseX, mouseY);
+		renderTooltip(matrixStack, mouseX, mouseY);
 		for (Widget widget : widgets) {
 			if (!widget.isHovered())
 				continue;
 
 			if (widget instanceof AbstractSimiWidget) {
 				if (!((AbstractSimiWidget) widget).getToolTip().isEmpty())
-					renderTooltip(matrixStack, ((AbstractSimiWidget) widget).getToolTip(), mouseX, mouseY);
+					renderComponentTooltip(matrixStack, ((AbstractSimiWidget) widget).getToolTip(), mouseX, mouseY);
 
 			} else {
 				widget.renderToolTip(matrixStack, mouseX, mouseY);
@@ -174,62 +165,9 @@ public abstract class AbstractSimiContainerScreen<T extends Container> extends C
 		}
 	}
 
-	protected void renderItemOverlayIntoGUI(MatrixStack matrixStack, FontRenderer fr, ItemStack stack, int xPosition,
-		int yPosition, @Nullable String text, int textColor) {
-		if (!stack.isEmpty()) {
-			if (stack.getItem()
-				.showDurabilityBar(stack)) {
-				RenderSystem.disableLighting();
-				RenderSystem.disableDepthTest();
-				RenderSystem.disableTexture();
-				RenderSystem.disableAlphaTest();
-				RenderSystem.disableBlend();
-				Tessellator tessellator = Tessellator.getInstance();
-				BufferBuilder bufferbuilder = tessellator.getBuffer();
-				double health = stack.getItem()
-					.getDurabilityForDisplay(stack);
-				int i = Math.round(13.0F - (float) health * 13.0F);
-				int j = stack.getItem()
-					.getRGBDurabilityForDisplay(stack);
-				this.draw(bufferbuilder, xPosition + 2, yPosition + 13, 13, 2, 0, 0, 0, 255);
-				this.draw(bufferbuilder, xPosition + 2, yPosition + 13, i, 1, j >> 16 & 255, j >> 8 & 255, j & 255,
-					255);
-				RenderSystem.enableBlend();
-				RenderSystem.enableAlphaTest();
-				RenderSystem.enableTexture();
-				RenderSystem.enableLighting();
-				RenderSystem.enableDepthTest();
-			}
-
-			if (stack.getCount() != 1 || text != null) {
-				String s = text == null ? String.valueOf(stack.getCount()) : text;
-				RenderSystem.disableLighting();
-				RenderSystem.disableDepthTest();
-				RenderSystem.disableBlend();
-				matrixStack.push();
-
-				int guiScaleFactor = (int) client.getWindow()
-					.getGuiScaleFactor();
-				matrixStack.translate(xPosition + 16.5f, yPosition + 16.5f, 0);
-				double scale = getItemCountTextScale();
-
-				matrixStack.scale((float) scale, (float) scale, 0);
-				matrixStack.translate(-fr.getStringWidth(s) - (guiScaleFactor > 1 ? 0 : -.5f),
-					-textRenderer.FONT_HEIGHT + (guiScaleFactor > 1 ? 1 : 1.75f), 0);
-				fr.drawWithShadow(matrixStack, s, 0, 0, textColor);
-
-				matrixStack.pop();
-				RenderSystem.enableBlend();
-				RenderSystem.enableLighting();
-				RenderSystem.enableDepthTest();
-				RenderSystem.enableBlend();
-			}
-		}
-	}
-
 	public double getItemCountTextScale() {
-		int guiScaleFactor = (int) client.getWindow()
-			.getGuiScaleFactor();
+		int guiScaleFactor = (int) minecraft.getWindow()
+			.getGuiScale();
 		double scale = 1;
 		switch (guiScaleFactor) {
 		case 1:
@@ -250,9 +188,85 @@ public abstract class AbstractSimiContainerScreen<T extends Container> extends C
 		return scale;
 	}
 
+	public int getLeftOfCentered(int textureWidth) {
+		return (width - textureWidth) / 2;
+	}
+
+	public void renderPlayerInventory(MatrixStack ms, int x, int y) {
+		AllGuiTextures.PLAYER_INVENTORY.draw(ms, this, x, y);
+		font.draw(ms, inventory.getDisplayName(), x + 8, y + 6, 0x404040);
+	}
+
+	/**
+	 * Used for moving JEI out of the way of extra things like Flexcrate renders.
+	 *
+	 * <p>This screen class must be bound to a SlotMover instance for this method to work.
+	 *
+	 * @return the space that the gui takes up besides the normal rectangle defined by {@link ContainerScreen}.
+	 */
+	public List<Rectangle2d> getExtraAreas() {
+		return Collections.emptyList();
+	}
+
+	// Not up to date with ItemRenderer
+	@Deprecated
+	protected void renderItemOverlayIntoGUI(MatrixStack matrixStack, FontRenderer fr, ItemStack stack, int xPosition,
+		int yPosition, @Nullable String text, int textColor) {
+		if (!stack.isEmpty()) {
+			if (stack.getItem()
+				.showDurabilityBar(stack)) {
+				RenderSystem.disableLighting();
+				RenderSystem.disableDepthTest();
+				RenderSystem.disableTexture();
+				RenderSystem.disableAlphaTest();
+				RenderSystem.disableBlend();
+				Tessellator tessellator = Tessellator.getInstance();
+				BufferBuilder bufferbuilder = tessellator.getBuilder();
+				double health = stack.getItem()
+					.getDurabilityForDisplay(stack);
+				int i = Math.round(13.0F - (float) health * 13.0F);
+				int j = stack.getItem()
+					.getRGBDurabilityForDisplay(stack);
+				this.draw(bufferbuilder, xPosition + 2, yPosition + 13, 13, 2, 0, 0, 0, 255);
+				this.draw(bufferbuilder, xPosition + 2, yPosition + 13, i, 1, j >> 16 & 255, j >> 8 & 255, j & 255,
+					255);
+				RenderSystem.enableBlend();
+				RenderSystem.enableAlphaTest();
+				RenderSystem.enableTexture();
+				RenderSystem.enableLighting();
+				RenderSystem.enableDepthTest();
+			}
+
+			if (stack.getCount() != 1 || text != null) {
+				String s = text == null ? String.valueOf(stack.getCount()) : text;
+				RenderSystem.disableLighting();
+				RenderSystem.disableDepthTest();
+				RenderSystem.disableBlend();
+				matrixStack.pushPose();
+
+				int guiScaleFactor = (int) minecraft.getWindow()
+					.getGuiScale();
+				matrixStack.translate(xPosition + 16.5f, yPosition + 16.5f, 0);
+				double scale = getItemCountTextScale();
+
+				matrixStack.scale((float) scale, (float) scale, 0);
+				matrixStack.translate(-fr.width(s) - (guiScaleFactor > 1 ? 0 : -.5f),
+					-font.lineHeight + (guiScaleFactor > 1 ? 1 : 1.75f), 0);
+				fr.drawShadow(matrixStack, s, 0, 0, textColor);
+
+				matrixStack.popPose();
+				RenderSystem.enableBlend();
+				RenderSystem.enableLighting();
+				RenderSystem.enableDepthTest();
+				RenderSystem.enableBlend();
+			}
+		}
+	}
+
+	@Deprecated
 	private void draw(BufferBuilder renderer, int x, int y, int width, int height, int red, int green, int blue,
 		int alpha) {
-		renderer.begin(7, DefaultVertexFormats.POSITION_COLOR);
+		renderer.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_COLOR);
 		renderer.vertex((double) (x + 0), (double) (y + 0), 0.0D)
 			.color(red, green, blue, alpha)
 			.endVertex();
@@ -266,21 +280,12 @@ public abstract class AbstractSimiContainerScreen<T extends Container> extends C
 			.color(red, green, blue, alpha)
 			.endVertex();
 		Tessellator.getInstance()
-			.draw();
-	}
-
-	/**
-	 * Used for moving JEI out of the way of extra things like Flexcrate renders
-	 *
-	 * @return the space that the gui takes up besides the normal rectangle defined by {@link ContainerScreen}.
-	 */
-	public List<Rectangle2d> getExtraAreas() {
-		return Collections.emptyList();
+			.end();
 	}
 
 	@Deprecated
 	protected void debugWindowArea(MatrixStack matrixStack) {
-		fill(matrixStack, guiLeft + xSize, guiTop + ySize, guiLeft, guiTop, 0xd3d3d3d3);
+		fill(matrixStack, leftPos + imageWidth, topPos + imageHeight, leftPos, topPos, 0xD3D3D3D3);
 	}
 
 	@Deprecated
@@ -289,4 +294,5 @@ public abstract class AbstractSimiContainerScreen<T extends Container> extends C
 			fill(matrixStack, area.getX() + area.getWidth(), area.getY() + area.getHeight(), area.getX(), area.getY(), 0xd3d3d3d3);
 		}
 	}
+
 }

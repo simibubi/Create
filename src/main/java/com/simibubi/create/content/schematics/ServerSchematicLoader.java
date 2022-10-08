@@ -17,6 +17,7 @@ import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
 import com.simibubi.create.Create;
 import com.simibubi.create.content.schematics.block.SchematicTableTileEntity;
+import com.simibubi.create.content.schematics.item.SchematicAndQuillItem;
 import com.simibubi.create.content.schematics.item.SchematicItem;
 import com.simibubi.create.foundation.config.AllConfigs;
 import com.simibubi.create.foundation.config.CSchematics;
@@ -116,7 +117,7 @@ public class ServerSchematicLoader {
 
 		try {
 			// Validate Referenced Block
-			SchematicTableTileEntity table = getTable(player.getEntityWorld(), pos);
+			SchematicTableTileEntity table = getTable(player.getCommandSenderWorld(), pos);
 			if (table == null)
 				return;
 
@@ -142,7 +143,7 @@ public class ServerSchematicLoader {
 
 			// Open Stream
 			OutputStream writer = Files.newOutputStream(uploadPath);
-			activeUploads.put(playerSchematicId, new SchematicUploadEntry(writer, size, player.getServerWorld(), pos));
+			activeUploads.put(playerSchematicId, new SchematicUploadEntry(writer, size, player.getLevel(), pos));
 
 			// Notify Tile Entity
 			table.startUpload(schematic);
@@ -157,9 +158,9 @@ public class ServerSchematicLoader {
 		Integer maxFileSize = getConfig().maxTotalSchematicSize.get();
 		if (size > maxFileSize * 1000) {
 			player.sendMessage(new TranslationTextComponent("create.schematics.uploadTooLarge")
-				.append(new StringTextComponent(" (" + size / 1000 + " KB).")), player.getUniqueID());
+				.append(new StringTextComponent(" (" + size / 1000 + " KB).")), player.getUUID());
 			player.sendMessage(new TranslationTextComponent("create.schematics.maxAllowedSize")
-				.append(new StringTextComponent(" " + maxFileSize + " KB")), player.getUniqueID());
+				.append(new StringTextComponent(" " + maxFileSize + " KB")), player.getUUID());
 			return false;
 		}
 		return true;
@@ -232,7 +233,7 @@ public class ServerSchematicLoader {
 	}
 
 	public SchematicTableTileEntity getTable(World world, BlockPos pos) {
-		TileEntity te = world.getTileEntity(pos);
+		TileEntity te = world.getBlockEntity(pos);
 		if (!(te instanceof SchematicTableTileEntity))
 			return null;
 		SchematicTableTileEntity table = (SchematicTableTileEntity) te;
@@ -291,7 +292,7 @@ public class ServerSchematicLoader {
 		}
 
 		// Not holding S&Q
-		if (!AllItems.SCHEMATIC_AND_QUILL.isIn(player.getHeldItemMainhand()))
+		if (!AllItems.SCHEMATIC_AND_QUILL.isIn(player.getMainHandItem()))
 			return;
 
 		try {
@@ -315,12 +316,13 @@ public class ServerSchematicLoader {
 			}
 
 			Template t = new Template();
-			t.takeBlocksFromWorld(world, pos, bounds, true, Blocks.AIR);
+			t.fillFromWorld(world, pos, bounds, true, Blocks.AIR);
 
 			try (OutputStream outputStream = Files.newOutputStream(path)) {
-				CompoundNBT nbttagcompound = t.writeToNBT(new CompoundNBT());
+				CompoundNBT nbttagcompound = t.save(new CompoundNBT());
+				SchematicAndQuillItem.replaceStructureVoidWithAir(nbttagcompound);
 				CompressedStreamTools.writeCompressed(nbttagcompound, outputStream);
-				player.setHeldItem(Hand.MAIN_HAND, SchematicItem.create(schematic, player.getGameProfile().getName()));
+				player.setItemInHand(Hand.MAIN_HAND, SchematicItem.create(schematic, player.getGameProfile().getName()));
 
 			} catch (IOException e) {
 				e.printStackTrace();

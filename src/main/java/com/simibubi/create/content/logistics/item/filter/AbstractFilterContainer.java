@@ -22,10 +22,10 @@ public abstract class AbstractFilterContainer extends GhostItemContainer<ItemSta
 	}
 
 	@Override
-	public ItemStack slotClick(int slotId, int dragType, ClickType clickTypeIn, PlayerEntity player) {
-		if (slotId == playerInventory.currentItem && clickTypeIn != ClickType.THROW)
+	public ItemStack clicked(int slotId, int dragType, ClickType clickTypeIn, PlayerEntity player) {
+		if (slotId == playerInventory.selected && clickTypeIn != ClickType.THROW)
 			return ItemStack.EMPTY;
-		return super.slotClick(slotId, dragType, clickTypeIn, player);
+		return super.clicked(slotId, dragType, clickTypeIn, player);
 	}
 
 	@Override
@@ -36,7 +36,7 @@ public abstract class AbstractFilterContainer extends GhostItemContainer<ItemSta
 	@Override
 	@OnlyIn(Dist.CLIENT)
 	protected ItemStack createOnClient(PacketBuffer extraData) {
-		return extraData.readItemStack();
+		return extraData.readItem();
 	}
 
 	protected abstract int getPlayerInventoryXOffset();
@@ -54,7 +54,12 @@ public abstract class AbstractFilterContainer extends GhostItemContainer<ItemSta
 	@Override
 	protected void saveData(ItemStack contentHolder) {
 		contentHolder.getOrCreateTag()
-			.put("Items", ghostInventory.serializeNBT());
+				.put("Items", ghostInventory.serializeNBT());
+	}
+
+	@Override
+	public boolean stillValid(PlayerEntity player) {
+		return playerInventory.getSelected() == contentHolder;
 	}
 
 }
